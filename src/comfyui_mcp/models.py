@@ -239,6 +239,49 @@ class GenerationRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
 
+class ComfyUIConfig(BaseModel):
+    """Configuration for connecting to a ComfyUI server.
+
+    Contains all settings needed to connect to and interact with a ComfyUI
+    instance, including server URL, authentication, timeouts, and output paths.
+
+    Attributes:
+        url: ComfyUI server URL (e.g., "http://127.0.0.1:8188")
+        api_key: Optional API key for authentication
+        timeout: Request timeout in seconds (default: 120.0, must be > 0)
+        output_dir: Optional directory path for saving generated images
+
+    Example:
+        >>> config = ComfyUIConfig(
+        ...     url="http://127.0.0.1:8188",
+        ...     api_key="secret-key",
+        ...     timeout=60.0,
+        ...     output_dir="/game/assets/generated"
+        ... )
+    """
+
+    url: str = Field(
+        ...,
+        description="ComfyUI server URL",
+        pattern=r"^https?://",
+    )
+    api_key: str | None = Field(
+        default=None,
+        description="Optional API key for authentication",
+    )
+    timeout: float = Field(
+        default=120.0,
+        gt=0.0,
+        description="Request timeout in seconds (must be > 0)",
+    )
+    output_dir: str | None = Field(
+        default=None,
+        description="Optional directory path for saving generated images",
+    )
+
+    model_config = {"extra": "forbid"}
+
+
 class TemplateParameter(BaseModel):
     """Represents a parameter definition for a workflow template.
 
@@ -418,6 +461,7 @@ __all__ = [
     "WorkflowPrompt",
     "GenerationResult",
     "GenerationRequest",
+    "ComfyUIConfig",
     "TemplateParameter",
     "WorkflowTemplate",
 ]

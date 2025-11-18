@@ -8,6 +8,7 @@ ComfyUI's workflow-based image generation with Godot game development.
 from __future__ import annotations
 
 from comfyui_mcp.models import (
+    ComfyUIConfig,
     GenerationRequest,
     GenerationResult,
     TemplateParameter,
@@ -23,6 +24,7 @@ __all__ = [
     "WorkflowPrompt",
     "GenerationResult",
     "GenerationRequest",
+    "ComfyUIConfig",
     "TemplateParameter",
     "WorkflowTemplate",
 ]
