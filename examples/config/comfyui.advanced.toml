@@ -1,0 +1,214 @@
+# ComfyUI MCP Server - Advanced Configuration
+# Comprehensive example showing all available configuration options
+# with detailed explanations and recommended values
+
+[comfyui]
+# ============================================================================
+# REQUIRED SETTINGS
+# ============================================================================
+
+# ComfyUI Server URL (required)
+# The base URL where your ComfyUI instance is running
+#
+# Format: Must start with http:// or https://
+# Trailing slashes are automatically removed
+#
+# Examples:
+#   - Local development: "http://localhost:8188"
+#   - Local custom port: "http://localhost:3000"
+#   - Remote server: "https://comfyui.example.com"
+#   - Docker container: "http://comfyui-container:8188"
+#   - IP address: "http://192.168.1.100:8188"
+url = "http://localhost:8188"
+
+# ============================================================================
+# AUTHENTICATION (Optional)
+# ============================================================================
+
+# API Key for authentication
+#
+# Security Requirements:
+#   - Minimum 8 characters if provided
+#   - Must not be empty or whitespace-only
+#   - Recommended: Use strong, randomly generated keys
+#
+# Best Practices:
+#   - NEVER commit API keys to version control
+#   - Use environment variables in production: COMFYUI_API_KEY
+#   - Rotate keys regularly
+#   - Use different keys for dev/staging/production
+#
+# To set via environment variable:
+#   export COMFYUI_API_KEY="your-secure-api-key-here"
+#
+# Uncomment and set if your ComfyUI instance requires authentication:
+# api_key = "your-api-key-min-8-characters"
+
+# ============================================================================
+# TIMEOUT CONFIGURATION (Optional)
+# ============================================================================
+
+# Request timeout in seconds
+#
+# Valid Range: 1.0 - 3600.0 seconds (1 second to 1 hour)
+# Default: 120.0 seconds (2 minutes)
+#
+# Recommended values by use case:
+#   - Simple text-to-image (512x512): 30-60 seconds
+#   - Standard workflows (512x512-768x768): 60-120 seconds
+#   - High-resolution (1024x1024+): 120-240 seconds
+#   - Complex multi-stage workflows: 180-300 seconds
+#   - Upscaling workflows: 240-360 seconds
+#   - Video generation: 300-600 seconds
+#   - Batch processing: 300-600 seconds
+#
+# Factors affecting timeout needs:
+#   - Image resolution (higher = longer)
+#   - Number of sampling steps (more = longer)
+#   - Model complexity (larger models = longer)
+#   - Number of workflow stages
+#   - Server hardware performance
+#   - Network latency (for remote servers)
+#
+# Error handling:
+#   - If timeout is too short: operations will fail prematurely
+#   - If timeout is too long: hung operations take longer to detect
+#
+# Note: Timeout applies to individual API requests, not entire workflows
+timeout = 120.0
+
+# ============================================================================
+# OUTPUT CONFIGURATION (Optional)
+# ============================================================================
+
+# Output directory for generated images
+#
+# Path Types:
+#   - Absolute path: "/path/to/images" (Linux/Mac) or "C:\\path\\to\\images" (Windows)
+#   - Relative path: "./generated_images" (relative to current working directory)
+#
+# Behavior:
+#   - Directory is created automatically if it doesn't exist
+#   - Must not be empty or whitespace-only if provided
+#   - Parent directory must exist and be writable
+#
+# Recommendations:
+#   - Development: "./dev_output" or "./generated_images"
+#   - Production: Absolute path to persistent storage
+#   - Docker: Mount a volume and use the mount path
+#   - Network storage: Ensure low latency and high bandwidth
+#
+# If not set: Images are saved to ComfyUI's default output directory
+#
+# Examples:
+#   - Local relative: "./generated_images"
+#   - Local absolute (Linux): "/var/app/comfyui/output"
+#   - Local absolute (Windows): "C:\\ComfyUI\\output"
+#   - Network share: "//nas/comfyui/generated"
+#   - Docker volume: "/app/output"
+output_dir = "./generated_images"
+
+# ============================================================================
+# ENVIRONMENT-SPECIFIC OVERRIDES
+# ============================================================================
+
+# Configuration Priority (highest to lowest):
+#   1. Environment variables (COMFYUI_URL, COMFYUI_API_KEY, etc.)
+#   2. TOML configuration file
+#   3. Python code (programmatic configuration)
+#   4. Default values
+#
+# Environment Variable Mapping:
+#   - COMFYUI_URL → url
+#   - COMFYUI_API_KEY → api_key
+#   - COMFYUI_TIMEOUT → timeout (converted to float)
+#   - COMFYUI_OUTPUT_DIR → output_dir
+#
+# Use environment variables for:
+#   - Sensitive values (API keys, credentials)
+#   - Environment-specific values (URLs, paths)
+#   - CI/CD pipeline configuration
+#   - Docker container configuration
+#   - Cloud deployment settings
+#
+# Example environment variable setup:
+#   export COMFYUI_URL="https://prod.example.com:8188"
+#   export COMFYUI_API_KEY="prod-api-key-supersecret"
+#   export COMFYUI_TIMEOUT="300.0"
+#   export COMFYUI_OUTPUT_DIR="/mnt/storage/images"
+
+# ============================================================================
+# USAGE EXAMPLES
+# ============================================================================
+
+# Python API:
+#   from comfyui_mcp import ComfyUIConfig
+#
+#   # Load from this TOML file
+#   config = ComfyUIConfig(
+#       url="http://localhost:8188",
+#       timeout=120.0,
+#       output_dir="./generated_images"
+#   )
+#
+#   # Or load from environment variables
+#   config = ComfyUIConfig.from_env()
+#
+# MCP Server:
+#   Add to your .mcp.json:
+#   {
+#     "mcpServers": {
+#       "comfyui-mcp": {
+#         "command": "python",
+#         "args": ["-m", "comfyui_mcp.server"],
+#         "env": {
+#           "COMFYUI_URL": "http://localhost:8188"
+#         }
+#       }
+#     }
+#   }
+
+# ============================================================================
+# TROUBLESHOOTING
+# ============================================================================
+
+# Common Issues:
+#
+# 1. Connection Refused:
+#    - Verify ComfyUI is running: curl http://localhost:8188/system_stats
+#    - Check firewall settings
+#    - Verify URL is correct (protocol, host, port)
+#
+# 2. Timeout Errors:
+#    - Increase timeout value for complex workflows
+#    - Check ComfyUI server performance
+#    - Verify network connectivity (ping, traceroute)
+#
+# 3. Authentication Failures:
+#    - Verify API key is set correctly
+#    - Check API key length (minimum 8 characters)
+#    - Ensure no extra whitespace in API key
+#
+# 4. Output Directory Errors:
+#    - Verify directory exists or parent directory is writable
+#    - Check disk space
+#    - Verify permissions (read/write access)
+#
+# 5. Configuration Not Loaded:
+#    - Check file is named correctly (comfyui.toml)
+#    - Verify file is in correct location (project root)
+#    - Check TOML syntax (use TOML validator)
+#    - Verify environment variables aren't overriding values
+
+# ============================================================================
+# ADDITIONAL RESOURCES
+# ============================================================================
+
+# Documentation:
+#   - Configuration Guide: https://github.com/PurlieuStudios/comfyui-mcp/blob/master/docs/CONFIGURATION.md
+#   - API Reference: https://github.com/PurlieuStudios/comfyui-mcp/blob/master/docs/API.md
+#   - README: https://github.com/PurlieuStudios/comfyui-mcp/blob/master/README.md
+#
+# Support:
+#   - GitHub Issues: https://github.com/PurlieuStudios/comfyui-mcp/issues
+#   - Discussions: https://github.com/PurlieuStudios/comfyui-mcp/discussions
