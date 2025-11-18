@@ -943,7 +943,7 @@ class TestComfyUIConfig:
         """Test creating config from dictionary."""
         data = {
             "url": "http://comfyui:8188",
-            "api_key": "key-123",
+            "api_key": "key-12345678",  # Min 8 chars required
             "timeout": 45.0,
             "output_dir": "/tmp/comfyui",
         }
@@ -951,7 +951,7 @@ class TestComfyUIConfig:
         config = ComfyUIConfig(**data)  # type: ignore[arg-type]
 
         assert config.url == "http://comfyui:8188"
-        assert config.api_key == "key-123"
+        assert config.api_key == "key-12345678"
         assert config.timeout == 45.0
         assert config.output_dir == "/tmp/comfyui"
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class WorkflowNode(BaseModel):
@@ -248,17 +248,24 @@ class ComfyUIConfig(BaseModel):
 
     Attributes:
         url: ComfyUI server URL (e.g., "http://127.0.0.1:8188")
-        api_key: Optional API key for authentication
-        timeout: Request timeout in seconds (default: 120.0, must be > 0)
+        api_key: Optional API key for authentication (min 8 chars if provided)
+        timeout: Request timeout in seconds (1.0 - 3600.0, default: 120.0)
         output_dir: Optional directory path for saving generated images
+
+    Validation Rules:
+        - URL: Must start with http:// or https://, trailing slashes removed
+        - API Key: If provided, must be non-empty, non-whitespace, min 8 characters
+        - Timeout: Must be between 1.0 and 3600.0 seconds (1 second to 1 hour)
+        - Output Dir: If provided, must be non-empty and non-whitespace
 
     Example:
         >>> config = ComfyUIConfig(
-        ...     url="http://127.0.0.1:8188",
-        ...     api_key="secret-key",
-        ...     timeout=60.0,
+        ...     url="http://127.0.0.1:8188/",  # Trailing slash removed
+        ...     api_key="sk-my-secret-key-12345",  # Min 8 chars
+        ...     timeout=60.0,  # Between 1.0 and 3600.0
         ...     output_dir="/game/assets/generated"
         ... )
+        >>> assert config.url == "http://127.0.0.1:8188"  # No trailing slash
     """
 
     url: str = Field(
@@ -280,7 +287,111 @@ class ComfyUIConfig(BaseModel):
         description="Optional directory path for saving generated images",
     )
 
-    model_config = {"extra": "forbid"}
+    model_config = {"extra": "forbid", "frozen": True}
+
+    @field_validator("url")
+    @classmethod
+    def normalize_url(cls, v: str) -> str:
+        """Remove trailing slashes from URL for consistency.
+
+        Args:
+            v: The URL value to validate
+
+        Returns:
+            URL with trailing slashes removed
+
+        Example:
+            >>> "http://localhost:8188///" -> "http://localhost:8188"
+        """
+        return v.rstrip("/")
+
+    @field_validator("api_key")
+    @classmethod
+    def validate_api_key(cls, v: str | None) -> str | None:
+        """Validate API key if provided.
+
+        Args:
+            v: The API key value to validate
+
+        Returns:
+            The validated API key
+
+        Raises:
+            ValueError: If API key is empty, whitespace-only, or shorter than 8 characters
+
+        Example:
+            >>> validate_api_key("sk-123456789")  # Valid: >= 8 chars
+            >>> validate_api_key("")  # Raises ValueError
+            >>> validate_api_key("short")  # Raises ValueError: < 8 chars
+        """
+        if v is not None:
+            # Check for empty or whitespace-only
+            if not v or not v.strip():
+                msg = "API key must not be empty or whitespace-only"
+                raise ValueError(msg)
+
+            # Check minimum length for security
+            if len(v) < 8:
+                msg = "API key must be at least 8 characters long"
+                raise ValueError(msg)
+
+        return v
+
+    @field_validator("timeout")
+    @classmethod
+    def validate_timeout(cls, v: float) -> float:
+        """Validate timeout is within reasonable bounds.
+
+        Args:
+            v: The timeout value to validate
+
+        Returns:
+            The validated timeout value
+
+        Raises:
+            ValueError: If timeout is below 1.0 or above 3600.0 seconds
+
+        Example:
+            >>> validate_timeout(60.0)  # Valid
+            >>> validate_timeout(0.5)  # Raises ValueError: < 1.0
+            >>> validate_timeout(7200.0)  # Raises ValueError: > 3600.0
+        """
+        if v < 1.0:
+            msg = "Timeout must be at least 1.0 second"
+            raise ValueError(msg)
+
+        if v > 3600.0:
+            msg = "Timeout must not exceed 3600.0 seconds (1 hour)"
+            raise ValueError(msg)
+
+        return v
+
+    @field_validator("output_dir")
+    @classmethod
+    def validate_output_dir(cls, v: str | None) -> str | None:
+        """Validate output directory if provided.
+
+        Args:
+            v: The output directory path to validate
+
+        Returns:
+            The validated output directory path
+
+        Raises:
+            ValueError: If output_dir is empty or whitespace-only
+
+        Example:
+            >>> validate_output_dir("/path/to/output")  # Valid
+            >>> validate_output_dir("")  # Raises ValueError
+            >>> validate_output_dir("   ")  # Raises ValueError
+        """
+        if v is not None:
+            # Check for empty or whitespace-only
+            if not v or not v.strip():
+                msg = "Output directory must not be empty or whitespace-only"
+                raise ValueError(msg)
+
+        return v
 
 
 class WorkflowState(str, Enum):
