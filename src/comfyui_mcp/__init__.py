@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from comfyui_mcp.comfyui_client import ComfyUIClient
 from comfyui_mcp.config import find_config_file, load_config
+from comfyui_mcp.image_generator import ImageGenerator
 from comfyui_mcp.models import (
     ComfyUIConfig,
     GenerationRequest,
@@ -27,6 +28,7 @@ __version__ = "0.1.0"
 __all__ = [
     "__version__",
     "ComfyUIClient",
+    "ImageGenerator",
     "WorkflowNode",
     "WorkflowPrompt",
     "GenerationResult",
