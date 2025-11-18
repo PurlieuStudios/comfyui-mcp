@@ -153,6 +153,50 @@ class WorkflowPrompt(BaseModel):
                 node.inputs["seed"] = seed
 
 
+class GenerationResult(BaseModel):
+    """Represents the result of a ComfyUI image generation operation.
+
+    Contains generated images, execution metadata, and timing information.
+    This model captures the complete output of a workflow execution including
+    paths to generated images and associated metadata.
+
+    Attributes:
+        images: List of file paths to generated images
+        execution_time: Time taken for generation in seconds
+        metadata: Dictionary containing generation metadata (model, dimensions, etc.)
+        prompt_id: Optional ComfyUI prompt ID for tracking this generation
+        seed: Optional seed value used for generation (from KSampler nodes)
+
+    Example:
+        >>> result = GenerationResult(
+        ...     images=["output/character.png"],
+        ...     execution_time=8.5,
+        ...     metadata={"model": "v1-5-pruned.safetensors", "steps": 20},
+        ...     prompt_id="prompt-abc123",
+        ...     seed=42
+        ... )
+    """
+
+    images: list[str] = Field(..., description="List of generated image file paths")
+    execution_time: float = Field(
+        ..., description="Generation execution time in seconds"
+    )
+    metadata: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Generation metadata (model name, dimensions, parameters, etc.)",
+    )
+    prompt_id: str | None = Field(
+        default=None,
+        description="ComfyUI prompt ID for tracking this generation",
+    )
+    seed: int | None = Field(
+        default=None,
+        description="Seed value used for generation (from KSampler nodes)",
+    )
+
+    model_config = {"extra": "forbid"}
+
+
 class TemplateParameter(BaseModel):
     """Represents a parameter definition for a workflow template.
 
@@ -327,4 +371,10 @@ class WorkflowTemplate(BaseModel):
             return obj
 
 
-__all__ = ["WorkflowNode", "WorkflowPrompt", "TemplateParameter", "WorkflowTemplate"]
+__all__ = [
+    "WorkflowNode",
+    "WorkflowPrompt",
+    "GenerationResult",
+    "TemplateParameter",
+    "WorkflowTemplate",
+]

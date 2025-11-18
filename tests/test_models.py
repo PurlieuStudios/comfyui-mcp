@@ -6,6 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from comfyui_mcp.models import (
+    GenerationResult,
     TemplateParameter,
     WorkflowNode,
     WorkflowPrompt,
@@ -514,3 +515,167 @@ class TestWorkflowTemplate:
         workflow = template.instantiate({})
 
         assert workflow.nodes["1"].inputs["steps"] == 20
+
+
+class TestGenerationResult:
+    """Tests for GenerationResult model."""
+
+    def test_create_simple_result(self) -> None:
+        """Test creating a simple generation result."""
+        result = GenerationResult(
+            images=["output/image1.png"],
+            execution_time=5.2,
+        )
+
+        assert result.images == ["output/image1.png"]
+        assert result.execution_time == 5.2
+        assert result.metadata == {}
+        assert result.prompt_id is None
+        assert result.seed is None
+
+    def test_create_result_with_multiple_images(self) -> None:
+        """Test creating a result with multiple generated images."""
+        result = GenerationResult(
+            images=[
+                "output/image1.png",
+                "output/image2.png",
+                "output/image3.png",
+            ],
+            execution_time=15.7,
+        )
+
+        assert len(result.images) == 3
+        assert "output/image1.png" in result.images
+        assert "output/image2.png" in result.images
+        assert "output/image3.png" in result.images
+
+    def test_create_result_with_metadata(self) -> None:
+        """Test creating a result with generation metadata."""
+        result = GenerationResult(
+            images=["output/character.png"],
+            execution_time=8.5,
+            metadata={
+                "model": "v1-5-pruned-emaonly.safetensors",
+                "width": 512,
+                "height": 768,
+                "steps": 20,
+                "cfg": 8.0,
+                "sampler": "euler",
+            },
+        )
+
+        assert result.metadata["model"] == "v1-5-pruned-emaonly.safetensors"
+        assert result.metadata["width"] == 512
+        assert result.metadata["height"] == 768
+        assert result.metadata["steps"] == 20
+
+    def test_create_result_with_prompt_id(self) -> None:
+        """Test creating a result with ComfyUI prompt ID."""
+        result = GenerationResult(
+            images=["output/test.png"],
+            execution_time=3.2,
+            prompt_id="prompt-12345",
+        )
+
+        assert result.prompt_id == "prompt-12345"
+
+    def test_create_result_with_seed(self) -> None:
+        """Test creating a result with seed value."""
+        result = GenerationResult(
+            images=["output/test.png"],
+            execution_time=4.1,
+            seed=987654321,
+        )
+
+        assert result.seed == 987654321
+
+    def test_create_result_with_all_fields(self) -> None:
+        """Test creating a result with all fields populated."""
+        result = GenerationResult(
+            images=["output/final.png", "output/final2.png"],
+            execution_time=12.3,
+            metadata={
+                "template": "character-portrait",
+                "model": "sdxl-base.safetensors",
+                "prompt": "a warrior in armor",
+            },
+            prompt_id="prompt-abc123",
+            seed=42,
+        )
+
+        assert len(result.images) == 2
+        assert result.execution_time == 12.3
+        assert result.metadata["template"] == "character-portrait"
+        assert result.prompt_id == "prompt-abc123"
+        assert result.seed == 42
+
+    def test_result_requires_images(self) -> None:
+        """Test that images field is required."""
+        with pytest.raises(ValidationError) as exc_info:
+            GenerationResult(execution_time=1.0)  # type: ignore
+
+        assert "images" in str(exc_info.value)
+
+    def test_result_requires_execution_time(self) -> None:
+        """Test that execution_time field is required."""
+        with pytest.raises(ValidationError) as exc_info:
+            GenerationResult(images=["test.png"])  # type: ignore
+
+        assert "execution_time" in str(exc_info.value)
+
+    def test_result_empty_images_list(self) -> None:
+        """Test that empty images list is valid (generation with no output)."""
+        result = GenerationResult(
+            images=[],
+            execution_time=2.5,
+        )
+
+        assert result.images == []
+        assert result.execution_time == 2.5
+
+    def test_result_negative_execution_time(self) -> None:
+        """Test that negative execution time is allowed (validation elsewhere)."""
+        # Note: We allow negative times at the model level; validation should
+        # happen at a higher level if needed
+        result = GenerationResult(
+            images=["test.png"],
+            execution_time=-1.0,
+        )
+
+        assert result.execution_time == -1.0
+
+    def test_result_serialization(self) -> None:
+        """Test that result can be serialized to dict/JSON."""
+        result = GenerationResult(
+            images=["output/test.png"],
+            execution_time=5.5,
+            metadata={"model": "sd-v1-5"},
+            prompt_id="test-123",
+            seed=999,
+        )
+
+        data = result.model_dump()
+
+        assert data["images"] == ["output/test.png"]
+        assert data["execution_time"] == 5.5
+        assert data["metadata"] == {"model": "sd-v1-5"}
+        assert data["prompt_id"] == "test-123"
+        assert data["seed"] == 999
+
+    def test_result_from_dict(self) -> None:
+        """Test creating result from dictionary."""
+        data = {
+            "images": ["img1.png", "img2.png"],
+            "execution_time": 7.8,
+            "metadata": {"steps": 20},
+            "prompt_id": "abc",
+            "seed": 123,
+        }
+
+        result = GenerationResult(**data)  # type: ignore[arg-type]
+
+        assert result.images == ["img1.png", "img2.png"]
+        assert result.execution_time == 7.8
+        assert result.metadata["steps"] == 20
+        assert result.prompt_id == "abc"
+        assert result.seed == 123
