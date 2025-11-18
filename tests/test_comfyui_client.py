@@ -1116,3 +1116,213 @@ class TestComfyUIClientHistory:
 
         # Clean up
         await client.close()
+
+
+class TestComfyUIClientImageDownload:
+    """Test ComfyUI client image download functionality."""
+
+    @pytest.mark.asyncio
+    async def test_download_image_success(self, aiohttp_server):
+        """Test successful image download."""
+        from aiohttp import web
+
+        # Fake image data
+        fake_image_data = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00"
+
+        async def view_handler(request):
+            # ComfyUI /view endpoint uses query parameters
+            return web.Response(body=fake_image_data, content_type="image/png")
+
+        app = web.Application()
+        app.router.add_get("/view", view_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        client = ComfyUIClient(config)
+
+        # Download image
+        image_data = await client.download_image("test_image.png")
+
+        assert isinstance(image_data, bytes)
+        assert image_data == fake_image_data
+        assert image_data.startswith(b"\x89PNG")  # PNG header
+
+        # Clean up
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_download_image_with_subfolder(self, aiohttp_server):
+        """Test image download with subfolder parameter."""
+        from aiohttp import web
+
+        received_params = {}
+
+        async def view_handler(request):
+            nonlocal received_params
+            received_params = dict(request.query)
+            return web.Response(body=b"test_image_data", content_type="image/png")
+
+        app = web.Application()
+        app.router.add_get("/view", view_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        client = ComfyUIClient(config)
+
+        # Download image with subfolder
+        await client.download_image("image.png", subfolder="2024-01")
+
+        assert received_params["filename"] == "image.png"
+        assert received_params["subfolder"] == "2024-01"
+        assert received_params["type"] == "output"
+
+        # Clean up
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_download_image_with_custom_type(self, aiohttp_server):
+        """Test image download with custom image type."""
+        from aiohttp import web
+
+        received_params = {}
+
+        async def view_handler(request):
+            nonlocal received_params
+            received_params = dict(request.query)
+            return web.Response(body=b"temp_image", content_type="image/png")
+
+        app = web.Application()
+        app.router.add_get("/view", view_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        client = ComfyUIClient(config)
+
+        # Download with custom type
+        await client.download_image("temp.png", image_type="temp")
+
+        assert received_params["filename"] == "temp.png"
+        assert received_params["type"] == "temp"
+
+        # Clean up
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_download_image_default_parameters(self, aiohttp_server):
+        """Test image download with default parameters."""
+        from aiohttp import web
+
+        received_params = {}
+
+        async def view_handler(request):
+            nonlocal received_params
+            received_params = dict(request.query)
+            return web.Response(body=b"jpeg_data", content_type="image/jpeg")
+
+        app = web.Application()
+        app.router.add_get("/view", view_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        client = ComfyUIClient(config)
+
+        # Download with defaults (empty subfolder, output type)
+        await client.download_image("photo.jpg")
+
+        assert received_params["filename"] == "photo.jpg"
+        assert received_params["subfolder"] == ""
+        assert received_params["type"] == "output"
+
+        # Clean up
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_download_image_connection_error(self):
+        """Test download_image handles connection errors."""
+        config = ComfyUIConfig(url="http://127.0.0.1:9999")
+        client = ComfyUIClient(config)
+
+        # Should raise exception on connection error
+        with pytest.raises(ClientConnectorError):
+            await client.download_image("test.png")
+
+        # Clean up
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_download_image_server_error(self, aiohttp_server):
+        """Test download_image handles server errors."""
+        from aiohttp import web
+
+        async def view_handler(request):
+            return web.Response(status=500, text="Internal Server Error")
+
+        app = web.Application()
+        app.router.add_get("/view", view_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        client = ComfyUIClient(config)
+
+        # Should raise exception on server error
+        with pytest.raises(ClientResponseError):
+            await client.download_image("test.png")
+
+        # Clean up
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_download_image_not_found(self, aiohttp_server):
+        """Test download_image when image file doesn't exist."""
+        from aiohttp import web
+
+        async def view_handler(request):
+            return web.Response(status=404, text="File not found")
+
+        app = web.Application()
+        app.router.add_get("/view", view_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        client = ComfyUIClient(config)
+
+        # Should raise exception on 404
+        with pytest.raises(ClientResponseError):
+            await client.download_image("nonexistent.png")
+
+        # Clean up
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_download_large_image(self, aiohttp_server):
+        """Test downloading a larger image file."""
+        from aiohttp import web
+
+        # Simulate a larger image (1MB)
+        large_image_data = b"\xff\xd8\xff\xe0" + (b"\x00" * (1024 * 1024))
+
+        async def view_handler(request):
+            return web.Response(body=large_image_data, content_type="image/jpeg")
+
+        app = web.Application()
+        app.router.add_get("/view", view_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        client = ComfyUIClient(config)
+
+        # Download large image
+        image_data = await client.download_image("large.jpg")
+
+        assert len(image_data) > 1024 * 1024
+        assert image_data.startswith(b"\xff\xd8\xff\xe0")  # JPEG header
+
+        # Clean up
+        await client.close()

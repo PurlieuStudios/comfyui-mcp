@@ -425,6 +425,64 @@ class ComfyUIClient:
             seed=None,  # TODO: Extract seed from workflow if needed
         )
 
+    async def download_image(
+        self, filename: str, subfolder: str = "", image_type: str = "output"
+    ) -> bytes:
+        """Download a generated image from ComfyUI server.
+
+        This method queries the ComfyUI /view endpoint to download raw image bytes.
+        The image is identified by filename, optional subfolder, and type.
+
+        Args:
+            filename: The image filename (e.g., "ComfyUI_00001_.png")
+            subfolder: Optional subfolder path (e.g., "2024-01", default: "")
+            image_type: Type of image (default: "output", can be "temp", "input", etc.)
+
+        Returns:
+            Raw image bytes (PNG, JPEG, etc.)
+
+        Raises:
+            aiohttp.ClientError: If there's an HTTP error
+            aiohttp.ClientConnectorError: If cannot connect to server
+            aiohttp.ClientResponseError: If image not found (404) or server error
+            TimeoutError: If the request times out
+
+        Example:
+            >>> config = ComfyUIConfig(url="http://127.0.0.1:8188")
+            >>> client = ComfyUIClient(config)
+            >>> # Get history first to find image filenames
+            >>> result = await client.get_history("prompt-123")
+            >>> # Download first image
+            >>> image_data = await client.download_image(result.images[0])
+            >>> # Save to file
+            >>> with open("output.png", "wb") as f:
+            ...     f.write(image_data)
+
+            Download with subfolder:
+            >>> image_data = await client.download_image(
+            ...     "image.png",
+            ...     subfolder="2024-01"
+            ... )
+        """
+        base_url = self.config.url.rstrip("/")
+        url = f"{base_url}/view"
+
+        # Build query parameters for ComfyUI /view endpoint
+        params = {
+            "filename": filename,
+            "subfolder": subfolder,
+            "type": image_type,
+        }
+
+        # Download the image
+        async with self.session.get(url, params=params) as response:
+            # Raise exception for HTTP errors (4xx, 5xx)
+            response.raise_for_status()
+
+            # Read and return the raw image bytes
+            image_bytes: bytes = await response.read()
+            return image_bytes
+
     async def __aenter__(self) -> ComfyUIClient:
         """Enter the async context manager.
 
