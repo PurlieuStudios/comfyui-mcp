@@ -10,7 +10,12 @@ from typing import TYPE_CHECKING, Any
 
 import aiohttp
 
-from comfyui_mcp.models import ComfyUIConfig, WorkflowPrompt
+from comfyui_mcp.models import (
+    ComfyUIConfig,
+    WorkflowPrompt,
+    WorkflowState,
+    WorkflowStatus,
+)
 
 if TYPE_CHECKING:
     from types import TracebackType
@@ -259,6 +264,76 @@ class ComfyUIClient:
             # Return the JSON response
             result: dict[str, Any] = await response.json()
             return result
+
+    async def get_queue_status(self, prompt_id: str) -> WorkflowStatus:
+        """Get queue status for a specific workflow by prompt ID.
+
+        This method queries the ComfyUI /queue endpoint to determine the current
+        execution state and position of a workflow in the processing queue.
+
+        Args:
+            prompt_id: The unique prompt ID returned from submit_workflow
+
+        Returns:
+            WorkflowStatus object containing:
+            - state: Current workflow state (RUNNING, QUEUED, COMPLETED, etc.)
+            - queue_position: Position in queue if queued (0-indexed), None otherwise
+            - progress: Execution progress (0.0 for not started, 1.0 for complete)
+
+        Raises:
+            aiohttp.ClientError: If there's an HTTP error
+            aiohttp.ClientConnectorError: If cannot connect to server
+            TimeoutError: If the request times out
+            Exception: For other unexpected errors
+
+        Example:
+            >>> config = ComfyUIConfig(url="http://127.0.0.1:8188")
+            >>> client = ComfyUIClient(config)
+            >>> response = await client.submit_workflow(workflow)
+            >>> prompt_id = response["prompt_id"]
+            >>> status = await client.get_queue_status(prompt_id)
+            >>> print(f"State: {status.state}, Position: {status.queue_position}")
+            State: WorkflowState.QUEUED, Position: 2
+        """
+        base_url = self.config.url.rstrip("/")
+        url = f"{base_url}/queue"
+
+        # Query the queue endpoint
+        async with self.session.get(url) as response:
+            # Raise exception for HTTP errors (4xx, 5xx)
+            response.raise_for_status()
+
+            # Get the queue data
+            queue_data: dict[str, Any] = await response.json()
+
+        # Extract running and pending queues
+        queue_running: list[list[Any]] = queue_data.get("queue_running", [])
+        queue_pending: list[list[Any]] = queue_data.get("queue_pending", [])
+
+        # Check if prompt is currently running
+        for item in queue_running:
+            if len(item) > 0 and item[0] == prompt_id:
+                return WorkflowStatus(
+                    state=WorkflowState.RUNNING,
+                    queue_position=None,
+                    progress=0.0,
+                )
+
+        # Check if prompt is in pending queue
+        for index, item in enumerate(queue_pending):
+            if len(item) > 0 and item[0] == prompt_id:
+                return WorkflowStatus(
+                    state=WorkflowState.QUEUED,
+                    queue_position=index,
+                    progress=0.0,
+                )
+
+        # If not found in either queue, assume it's completed
+        return WorkflowStatus(
+            state=WorkflowState.COMPLETED,
+            queue_position=None,
+            progress=1.0,
+        )
 
     async def __aenter__(self) -> ComfyUIClient:
         """Enter the async context manager.

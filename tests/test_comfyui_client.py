@@ -6,7 +6,13 @@ import pytest
 from aiohttp import ClientConnectorError, ClientResponseError, ClientSession
 
 from comfyui_mcp.comfyui_client import ComfyUIClient
-from comfyui_mcp.models import ComfyUIConfig, WorkflowNode, WorkflowPrompt
+from comfyui_mcp.models import (
+    ComfyUIConfig,
+    WorkflowNode,
+    WorkflowPrompt,
+    WorkflowState,
+    WorkflowStatus,
+)
 
 
 class TestComfyUIClientInitialization:
@@ -642,3 +648,207 @@ class TestComfyUIClientWorkflowSubmission:
 
         # Clean up
         await comfy_client.close()
+
+
+class TestComfyUIClientQueueStatus:
+    """Test ComfyUI client queue status monitoring."""
+
+    @pytest.mark.asyncio
+    async def test_get_queue_status_running(self, aiohttp_server):
+        """Test get_queue_status when workflow is running."""
+        from aiohttp import web
+
+        async def queue_handler(request):
+            return web.json_response(
+                {
+                    "queue_running": [["prompt-123", 1]],
+                    "queue_pending": [],
+                }
+            )
+
+        app = web.Application()
+        app.router.add_get("/queue", queue_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        client = ComfyUIClient(config)
+
+        # Get queue status
+        status = await client.get_queue_status("prompt-123")
+
+        assert isinstance(status, WorkflowStatus)
+        assert status.state == WorkflowState.RUNNING
+        assert status.queue_position is None
+        assert status.progress == 0.0
+
+        # Clean up
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_get_queue_status_queued(self, aiohttp_server):
+        """Test get_queue_status when workflow is queued."""
+        from aiohttp import web
+
+        async def queue_handler(request):
+            return web.json_response(
+                {
+                    "queue_running": [["prompt-111", 1]],
+                    "queue_pending": [
+                        ["prompt-222", 2],
+                        ["prompt-333", 3],
+                        ["prompt-444", 4],
+                    ],
+                }
+            )
+
+        app = web.Application()
+        app.router.add_get("/queue", queue_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        client = ComfyUIClient(config)
+
+        # Get queue status for second pending item (index 1)
+        status = await client.get_queue_status("prompt-333")
+
+        assert isinstance(status, WorkflowStatus)
+        assert status.state == WorkflowState.QUEUED
+        assert status.queue_position == 1  # Second in pending queue (0-indexed)
+        assert status.progress == 0.0
+
+        # Clean up
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_get_queue_status_first_in_queue(self, aiohttp_server):
+        """Test get_queue_status when workflow is first in pending queue."""
+        from aiohttp import web
+
+        async def queue_handler(request):
+            return web.json_response(
+                {
+                    "queue_running": [],
+                    "queue_pending": [["prompt-555", 5]],
+                }
+            )
+
+        app = web.Application()
+        app.router.add_get("/queue", queue_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        client = ComfyUIClient(config)
+
+        # Get queue status
+        status = await client.get_queue_status("prompt-555")
+
+        assert isinstance(status, WorkflowStatus)
+        assert status.state == WorkflowState.QUEUED
+        assert status.queue_position == 0
+        assert status.progress == 0.0
+
+        # Clean up
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_get_queue_status_not_found(self, aiohttp_server):
+        """Test get_queue_status when prompt_id is not in queue (completed/unknown)."""
+        from aiohttp import web
+
+        async def queue_handler(request):
+            return web.json_response(
+                {
+                    "queue_running": [["prompt-111", 1]],
+                    "queue_pending": [["prompt-222", 2]],
+                }
+            )
+
+        app = web.Application()
+        app.router.add_get("/queue", queue_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        client = ComfyUIClient(config)
+
+        # Get queue status for non-existent prompt
+        status = await client.get_queue_status("prompt-999")
+
+        assert isinstance(status, WorkflowStatus)
+        assert status.state == WorkflowState.COMPLETED
+        assert status.queue_position is None
+        assert status.progress == 1.0
+
+        # Clean up
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_get_queue_status_empty_queue(self, aiohttp_server):
+        """Test get_queue_status with empty queue."""
+        from aiohttp import web
+
+        async def queue_handler(request):
+            return web.json_response(
+                {
+                    "queue_running": [],
+                    "queue_pending": [],
+                }
+            )
+
+        app = web.Application()
+        app.router.add_get("/queue", queue_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        client = ComfyUIClient(config)
+
+        # Get queue status
+        status = await client.get_queue_status("prompt-empty")
+
+        assert isinstance(status, WorkflowStatus)
+        assert status.state == WorkflowState.COMPLETED
+        assert status.queue_position is None
+        assert status.progress == 1.0
+
+        # Clean up
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_get_queue_status_connection_error(self):
+        """Test get_queue_status handles connection errors."""
+        config = ComfyUIConfig(url="http://127.0.0.1:9999")
+        client = ComfyUIClient(config)
+
+        # Should raise exception on connection error
+        with pytest.raises(ClientConnectorError):
+            await client.get_queue_status("prompt-123")
+
+        # Clean up
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_get_queue_status_server_error(self, aiohttp_server):
+        """Test get_queue_status handles server errors."""
+        from aiohttp import web
+
+        async def queue_handler(request):
+            return web.Response(status=500, text="Internal Server Error")
+
+        app = web.Application()
+        app.router.add_get("/queue", queue_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        client = ComfyUIClient(config)
+
+        # Should raise exception on server error
+        with pytest.raises(ClientResponseError):
+            await client.get_queue_status("prompt-123")
+
+        # Clean up
+        await client.close()
