@@ -153,4 +153,178 @@ class WorkflowPrompt(BaseModel):
                 node.inputs["seed"] = seed
 
 
-__all__ = ["WorkflowNode", "WorkflowPrompt"]
+class TemplateParameter(BaseModel):
+    """Represents a parameter definition for a workflow template.
+
+    Template parameters define what values can be customized when instantiating
+    a workflow from a template. Each parameter has a type, default value, and
+    indicates whether it's required.
+
+    Attributes:
+        name: Parameter name (e.g., "prompt", "width", "seed")
+        description: Human-readable description of the parameter
+        type: Parameter type ("string", "int", "float", "bool")
+        default: Default value for the parameter
+        required: Whether the parameter must be provided (default: True)
+
+    Example:
+        >>> param = TemplateParameter(
+        ...     name="steps",
+        ...     description="Number of sampling steps",
+        ...     type="int",
+        ...     default=20
+        ... )
+    """
+
+    name: str = Field(..., description="Parameter name")
+    description: str = Field(..., description="Parameter description")
+    type: str = Field(..., description="Parameter type (string, int, float, bool)")
+    default: Any = Field(..., description="Default value for the parameter")
+    required: bool = Field(default=True, description="Whether parameter is required")
+
+    model_config = {"extra": "forbid"}
+
+
+class WorkflowTemplate(BaseModel):
+    """Represents a reusable ComfyUI workflow template.
+
+    Workflow templates define reusable patterns for generating specific types
+    of images (e.g., character portraits, item icons). Templates include
+    parameter definitions and a base workflow structure that can be instantiated
+    with specific parameter values.
+
+    Attributes:
+        name: Template name (e.g., "Character Portrait Generator")
+        description: Description of what the template generates
+        category: Template category (optional: "character", "item", "environment")
+        parameters: Dictionary of parameter definitions
+        nodes: Base workflow structure with parameter placeholders
+
+    Example:
+        >>> template = WorkflowTemplate(
+        ...     name="Simple Generator",
+        ...     description="Basic image generation",
+        ...     parameters={
+        ...         "prompt": TemplateParameter(
+        ...             name="prompt",
+        ...             description="Text prompt",
+        ...             type="string",
+        ...             default="a landscape"
+        ...         )
+        ...     },
+        ...     nodes={
+        ...         "1": WorkflowNode(
+        ...             class_type="CLIPTextEncode",
+        ...             inputs={"text": "{{prompt}}"}
+        ...         )
+        ...     }
+        ... )
+    """
+
+    name: str = Field(..., description="Template name")
+    description: str = Field(..., description="Template description")
+    category: str | None = Field(
+        default=None, description="Template category (character, item, environment)"
+    )
+    parameters: dict[str, TemplateParameter] = Field(
+        ..., description="Parameter definitions for this template"
+    )
+    nodes: dict[str, WorkflowNode] = Field(
+        ..., description="Base workflow structure with parameter placeholders"
+    )
+
+    model_config = {"extra": "forbid"}
+
+    def instantiate(self, params: dict[str, Any] | None = None) -> WorkflowPrompt:
+        """Create a WorkflowPrompt instance from this template.
+
+        Substitutes parameter placeholders in the workflow nodes with actual values.
+        Placeholders are in the format {{parameter_name}} and are replaced with
+        values from the params dict or the parameter's default value.
+
+        Args:
+            params: Dictionary of parameter values to substitute. If a parameter
+                   is not provided, its default value is used.
+
+        Returns:
+            WorkflowPrompt instance with all placeholders replaced with actual values
+
+        Example:
+            >>> template = WorkflowTemplate(...)
+            >>> workflow = template.instantiate({"prompt": "a warrior", "seed": 123})
+        """
+        import copy
+
+        # Start with default values
+        param_values: dict[str, Any] = {}
+        for param_name, param_def in self.parameters.items():
+            param_values[param_name] = param_def.default
+
+        # Override with provided values
+        if params is not None:
+            param_values.update(params)
+
+        # Deep copy nodes to avoid modifying the template
+        instantiated_nodes: dict[str, WorkflowNode] = {}
+
+        for node_id, node in self.nodes.items():
+            # Deep copy the node's inputs
+            node_inputs = copy.deepcopy(node.inputs)
+
+            # Substitute parameters in inputs
+            node_inputs = self._substitute_parameters(node_inputs, param_values)
+
+            # Create new node with substituted inputs
+            instantiated_nodes[node_id] = WorkflowNode(
+                class_type=node.class_type, inputs=node_inputs
+            )
+
+        return WorkflowPrompt(nodes=instantiated_nodes)
+
+    def _substitute_parameters(self, obj: Any, param_values: dict[str, Any]) -> Any:
+        """Recursively substitute parameter placeholders in an object.
+
+        Args:
+            obj: Object to process (can be dict, list, str, or primitive)
+            param_values: Dictionary of parameter values
+
+        Returns:
+            Object with all {{parameter_name}} placeholders replaced
+        """
+        import re
+
+        if isinstance(obj, str):
+            # Check if the entire string is a placeholder
+            match = re.fullmatch(r"\{\{(\w+)\}\}", obj)
+            if match:
+                param_name = match.group(1)
+                value = param_values.get(param_name)
+                if value is not None:
+                    return value  # Return actual value, preserving type
+                return obj  # Keep placeholder if no value
+
+            # Otherwise, do string substitution
+            def replacer(match: re.Match[str]) -> str:
+                param_name = match.group(1)
+                value = param_values.get(param_name)
+                if value is None:
+                    return match.group(0)  # Keep placeholder if no value
+                return str(value)
+
+            return re.sub(r"\{\{(\w+)\}\}", replacer, obj)
+
+        elif isinstance(obj, dict):
+            return {
+                key: self._substitute_parameters(val, param_values)
+                for key, val in obj.items()
+            }
+
+        elif isinstance(obj, list):
+            return [self._substitute_parameters(item, param_values) for item in obj]
+
+        else:
+            # Return primitives as-is
+            return obj
+
+
+__all__ = ["WorkflowNode", "WorkflowPrompt", "TemplateParameter", "WorkflowTemplate"]
