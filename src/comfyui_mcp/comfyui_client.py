@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 import aiohttp
 
-from comfyui_mcp.models import ComfyUIConfig
+from comfyui_mcp.models import ComfyUIConfig, WorkflowPrompt
 
 if TYPE_CHECKING:
     from types import TracebackType
@@ -202,6 +202,63 @@ class ComfyUIClient:
             result["error"] = f"Unexpected error: {e}"
 
         return result
+
+    async def submit_workflow(self, workflow: WorkflowPrompt) -> dict[str, Any]:
+        """Submit a workflow to ComfyUI for execution.
+
+        This method submits a workflow prompt to the ComfyUI server's /prompt endpoint
+        for processing. The workflow is converted to the proper API format using the
+        WorkflowPrompt.to_api_format() method before submission.
+
+        Args:
+            workflow: WorkflowPrompt object containing nodes and configuration
+
+        Returns:
+            Dictionary containing the server response, which includes:
+            - prompt_id (str): Unique identifier for the submitted workflow
+
+        Raises:
+            aiohttp.ClientError: If there's an HTTP error during submission
+            aiohttp.ClientConnectorError: If cannot connect to server
+            TimeoutError: If the request times out
+            Exception: For other unexpected errors
+
+        Example:
+            >>> config = ComfyUIConfig(url="http://127.0.0.1:8188")
+            >>> client = ComfyUIClient(config)
+            >>> workflow = WorkflowPrompt(
+            ...     nodes={
+            ...         "1": WorkflowNode(
+            ...             class_type="KSampler",
+            ...             inputs={"seed": 123, "steps": 20}
+            ...         )
+            ...     }
+            ... )
+            >>> response = await client.submit_workflow(workflow)
+            >>> print(response["prompt_id"])
+            prompt-abc123
+
+            With client_id for progress tracking:
+            >>> workflow = WorkflowPrompt(
+            ...     nodes={...},
+            ...     client_id="my-client-id"
+            ... )
+            >>> response = await client.submit_workflow(workflow)
+        """
+        base_url = self.config.url.rstrip("/")
+        url = f"{base_url}/prompt"
+
+        # Convert workflow to ComfyUI API format
+        payload = workflow.to_api_format()
+
+        # Submit workflow via POST request
+        async with self.session.post(url, json=payload) as response:
+            # Raise exception for HTTP errors (4xx, 5xx)
+            response.raise_for_status()
+
+            # Return the JSON response
+            result: dict[str, Any] = await response.json()
+            return result
 
     async def __aenter__(self) -> ComfyUIClient:
         """Enter the async context manager.

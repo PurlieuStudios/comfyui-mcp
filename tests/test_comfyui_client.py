@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import pytest
-from aiohttp import ClientSession
+from aiohttp import ClientConnectorError, ClientResponseError, ClientSession
 
 from comfyui_mcp.comfyui_client import ComfyUIClient
-from comfyui_mcp.models import ComfyUIConfig
+from comfyui_mcp.models import ComfyUIConfig, WorkflowNode, WorkflowPrompt
 
 
 class TestComfyUIClientInitialization:
@@ -418,6 +418,227 @@ class TestComfyUIClientConnectionValidation:
         assert result1 is True
         assert result2 is True
         assert result3 is True
+
+        # Clean up
+        await comfy_client.close()
+
+
+class TestComfyUIClientWorkflowSubmission:
+    """Test ComfyUI client workflow submission to /prompt endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_submit_workflow_success(self, aiohttp_server):
+        """Test successful workflow submission."""
+        from aiohttp import web
+
+        # Create mock ComfyUI server
+        app = web.Application()
+
+        async def prompt_handler(request):
+            await request.json()
+            return web.json_response({"prompt_id": "test-prompt-123"})
+
+        app.router.add_post("/prompt", prompt_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        comfy_client = ComfyUIClient(config)
+
+        # Create test workflow
+        workflow = WorkflowPrompt(
+            nodes={
+                "1": WorkflowNode(
+                    class_type="KSampler", inputs={"seed": 123, "steps": 20}
+                )
+            }
+        )
+
+        # Submit workflow
+        response = await comfy_client.submit_workflow(workflow)
+
+        assert "prompt_id" in response
+        assert response["prompt_id"] == "test-prompt-123"
+
+        # Clean up
+        await comfy_client.close()
+
+    @pytest.mark.asyncio
+    async def test_submit_workflow_with_client_id(self, aiohttp_server):
+        """Test workflow submission includes client_id when provided."""
+        from aiohttp import web
+
+        received_data = {}
+
+        async def prompt_handler(request):
+            nonlocal received_data
+            received_data = await request.json()
+            return web.json_response({"prompt_id": "test-prompt-456"})
+
+        app = web.Application()
+        app.router.add_post("/prompt", prompt_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        comfy_client = ComfyUIClient(config)
+
+        # Create workflow with client_id
+        workflow = WorkflowPrompt(
+            nodes={"1": WorkflowNode(class_type="KSampler", inputs={"seed": 456})},
+            client_id="my-test-client",
+        )
+
+        # Submit workflow
+        response = await comfy_client.submit_workflow(workflow)
+
+        assert response["prompt_id"] == "test-prompt-456"
+        assert "client_id" in received_data
+        assert received_data["client_id"] == "my-test-client"
+
+        # Clean up
+        await comfy_client.close()
+
+    @pytest.mark.asyncio
+    async def test_submit_workflow_sends_correct_format(self, aiohttp_server):
+        """Test that workflow is sent in correct ComfyUI API format."""
+        from aiohttp import web
+
+        received_data = {}
+
+        async def prompt_handler(request):
+            nonlocal received_data
+            received_data = await request.json()
+            return web.json_response({"prompt_id": "test-prompt-789"})
+
+        app = web.Application()
+        app.router.add_post("/prompt", prompt_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        comfy_client = ComfyUIClient(config)
+
+        # Create workflow
+        workflow = WorkflowPrompt(
+            nodes={
+                "1": WorkflowNode(
+                    class_type="CheckpointLoaderSimple",
+                    inputs={"ckpt_name": "model.safetensors"},
+                ),
+                "2": WorkflowNode(
+                    class_type="KSampler",
+                    inputs={"seed": 789, "model": ["1", 0]},
+                ),
+            }
+        )
+
+        # Submit workflow
+        await comfy_client.submit_workflow(workflow)
+
+        # Verify format
+        assert "prompt" in received_data
+        assert "1" in received_data["prompt"]
+        assert "2" in received_data["prompt"]
+        assert received_data["prompt"]["1"]["class_type"] == "CheckpointLoaderSimple"
+        assert received_data["prompt"]["2"]["class_type"] == "KSampler"
+        assert received_data["prompt"]["2"]["inputs"]["seed"] == 789
+
+        # Clean up
+        await comfy_client.close()
+
+    @pytest.mark.asyncio
+    async def test_submit_workflow_server_error(self, aiohttp_server):
+        """Test workflow submission handles server errors."""
+        from aiohttp import web
+
+        async def prompt_handler(request):
+            return web.Response(status=500, text="Internal Server Error")
+
+        app = web.Application()
+        app.router.add_post("/prompt", prompt_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        comfy_client = ComfyUIClient(config)
+
+        # Create workflow
+        workflow = WorkflowPrompt(
+            nodes={"1": WorkflowNode(class_type="KSampler", inputs={"seed": 1})}
+        )
+
+        # Should raise exception on server error
+        with pytest.raises(ClientResponseError):
+            await comfy_client.submit_workflow(workflow)
+
+        # Clean up
+        await comfy_client.close()
+
+    @pytest.mark.asyncio
+    async def test_submit_workflow_connection_error(self):
+        """Test workflow submission handles connection errors."""
+        config = ComfyUIConfig(url="http://127.0.0.1:9999")
+        client = ComfyUIClient(config)
+
+        # Create workflow
+        workflow = WorkflowPrompt(
+            nodes={"1": WorkflowNode(class_type="KSampler", inputs={"seed": 1})}
+        )
+
+        # Should raise exception on connection error
+        with pytest.raises(ClientConnectorError):
+            await client.submit_workflow(workflow)
+
+        # Clean up
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_submit_workflow_complex_workflow(self, aiohttp_server):
+        """Test submitting complex workflow with multiple nodes."""
+        from aiohttp import web
+
+        async def prompt_handler(request):
+            return web.json_response({"prompt_id": "complex-workflow-123"})
+
+        app = web.Application()
+        app.router.add_post("/prompt", prompt_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        comfy_client = ComfyUIClient(config)
+
+        # Create complex workflow
+        workflow = WorkflowPrompt(
+            nodes={
+                "1": WorkflowNode(
+                    class_type="CheckpointLoaderSimple",
+                    inputs={"ckpt_name": "v1-5-pruned.safetensors"},
+                ),
+                "2": WorkflowNode(
+                    class_type="CLIPTextEncode",
+                    inputs={"text": "a warrior", "clip": ["1", 1]},
+                ),
+                "3": WorkflowNode(
+                    class_type="KSampler",
+                    inputs={
+                        "seed": 12345,
+                        "steps": 20,
+                        "cfg": 7.5,
+                        "model": ["1", 0],
+                        "positive": ["2", 0],
+                    },
+                ),
+                "4": WorkflowNode(class_type="SaveImage", inputs={"images": ["3", 0]}),
+            }
+        )
+
+        # Submit workflow
+        response = await comfy_client.submit_workflow(workflow)
+
+        assert "prompt_id" in response
+        assert response["prompt_id"] == "complex-workflow-123"
 
         # Clean up
         await comfy_client.close()
