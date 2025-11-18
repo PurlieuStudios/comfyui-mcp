@@ -393,6 +393,62 @@ class ComfyUIConfig(BaseModel):
 
         return v
 
+    @classmethod
+    def from_env(cls) -> ComfyUIConfig:
+        """Load configuration from environment variables.
+
+        Reads configuration values from the following environment variables:
+        - COMFYUI_URL (required): ComfyUI server URL
+        - COMFYUI_API_KEY (optional): API key for authentication
+        - COMFYUI_TIMEOUT (optional): Request timeout in seconds (default: 120.0)
+        - COMFYUI_OUTPUT_DIR (optional): Directory for saving generated images
+
+        All string values are automatically trimmed of leading/trailing whitespace.
+        All field validators are applied to the loaded values.
+
+        Returns:
+            ComfyUIConfig instance with values loaded from environment variables
+
+        Raises:
+            ValueError: If COMFYUI_URL is not set or is empty
+            ValidationError: If any environment variable value fails validation
+
+        Example:
+            >>> import os
+            >>> os.environ["COMFYUI_URL"] = "http://localhost:8188"
+            >>> os.environ["COMFYUI_TIMEOUT"] = "60.0"
+            >>> config = ComfyUIConfig.from_env()
+            >>> assert config.url == "http://localhost:8188"
+            >>> assert config.timeout == 60.0
+        """
+        import os
+
+        # Required: COMFYUI_URL
+        url = os.environ.get("COMFYUI_URL", "").strip()
+        if not url:
+            msg = "COMFYUI_URL environment variable is required"
+            raise ValueError(msg)
+
+        # Optional: COMFYUI_API_KEY
+        api_key_raw = os.environ.get("COMFYUI_API_KEY")
+        api_key = api_key_raw.strip() if api_key_raw is not None else None
+
+        # Optional: COMFYUI_TIMEOUT (with type conversion)
+        timeout_raw = os.environ.get("COMFYUI_TIMEOUT")
+        timeout = float(timeout_raw.strip()) if timeout_raw is not None else 120.0
+
+        # Optional: COMFYUI_OUTPUT_DIR
+        output_dir_raw = os.environ.get("COMFYUI_OUTPUT_DIR")
+        output_dir = output_dir_raw.strip() if output_dir_raw is not None else None
+
+        # Create config instance (validators will run automatically)
+        return cls(
+            url=url,
+            api_key=api_key,
+            timeout=timeout,
+            output_dir=output_dir,
+        )
+
 
 class WorkflowState(str, Enum):
     """Enumeration of possible workflow execution states.
