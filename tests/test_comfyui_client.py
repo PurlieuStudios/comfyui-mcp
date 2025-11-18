@@ -292,7 +292,7 @@ class TestComfyUIClientConnectionValidation:
     @pytest.mark.asyncio
     async def test_validate_connection_timeout(self):
         """Test connection validation with timeout."""
-        config = ComfyUIConfig(url="http://10.255.255.1:8188", timeout=0.1)
+        config = ComfyUIConfig(url="http://10.255.255.1:8188", timeout=1.0)
         client = ComfyUIClient(config)
 
         is_connected = await client.validate_connection()
