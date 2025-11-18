@@ -883,13 +883,31 @@ class WorkflowTemplate(BaseModel):
             nodes[node_id] = WorkflowNode(**node_data)
 
         # Create and return WorkflowTemplate instance
-        return cls(
-            name=data["name"],
-            description=data["description"],
-            category=data.get("category"),
-            parameters=parameters,
-            nodes=nodes,
-        )
+        # Let Pydantic handle validation of required fields
+        try:
+            return cls(
+                name=data["name"],
+                description=data["description"],
+                category=data.get("category"),
+                parameters=parameters,
+                nodes=nodes,
+            )
+        except KeyError as e:
+            from pydantic import ValidationError as PydanticValidationError
+
+            # Convert KeyError to ValidationError for missing required fields
+            msg = f"Missing required field: {e}"
+            raise PydanticValidationError.from_exception_data(
+                "WorkflowTemplate",
+                [
+                    {  # type: ignore[typeddict-unknown-key]
+                        "type": "missing",
+                        "loc": (str(e).strip("'"),),
+                        "msg": "Field required",
+                        "input": data,
+                    }
+                ],
+            ) from e
 
 
 __all__ = [

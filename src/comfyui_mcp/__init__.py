@@ -21,6 +21,7 @@ from comfyui_mcp.models import (
     WorkflowTemplate,
 )
 from comfyui_mcp.retry import retry_with_backoff
+from comfyui_mcp.template_manager import WorkflowTemplateManager
 
 __version__ = "0.1.0"
 __all__ = [
@@ -35,6 +36,7 @@ __all__ = [
     "WorkflowStatus",
     "TemplateParameter",
     "WorkflowTemplate",
+    "WorkflowTemplateManager",
     "retry_with_backoff",
     "find_config_file",
     "load_config",
