@@ -14,6 +14,8 @@ from comfyui_mcp.models import (
     TemplateParameter,
     WorkflowNode,
     WorkflowPrompt,
+    WorkflowState,
+    WorkflowStatus,
     WorkflowTemplate,
 )
 
@@ -25,6 +27,8 @@ __all__ = [
     "GenerationResult",
     "GenerationRequest",
     "ComfyUIConfig",
+    "WorkflowState",
+    "WorkflowStatus",
     "TemplateParameter",
     "WorkflowTemplate",
 ]

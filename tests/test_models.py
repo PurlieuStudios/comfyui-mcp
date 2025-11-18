@@ -12,6 +12,8 @@ from comfyui_mcp.models import (
     TemplateParameter,
     WorkflowNode,
     WorkflowPrompt,
+    WorkflowState,
+    WorkflowStatus,
     WorkflowTemplate,
 )
 
@@ -980,3 +982,187 @@ class TestComfyUIConfig:
         """Test that zero timeout is invalid."""
         with pytest.raises(ValidationError):
             ComfyUIConfig(url="http://localhost:8188", timeout=0.0)
+
+
+class TestWorkflowStatus:
+    """Tests for WorkflowStatus model and WorkflowState enum."""
+
+    def test_workflow_state_enum_values(self) -> None:
+        """Test that WorkflowState enum has expected values."""
+        assert WorkflowState.PENDING == "pending"
+        assert WorkflowState.QUEUED == "queued"
+        assert WorkflowState.RUNNING == "running"
+        assert WorkflowState.COMPLETED == "completed"
+        assert WorkflowState.FAILED == "failed"
+        assert WorkflowState.CANCELLED == "cancelled"
+
+    def test_create_simple_status(self) -> None:
+        """Test creating a simple workflow status."""
+        status = WorkflowStatus(
+            state=WorkflowState.PENDING,
+        )
+
+        assert status.state == WorkflowState.PENDING
+        assert status.queue_position is None
+        assert status.progress == 0.0
+
+    def test_create_status_queued(self) -> None:
+        """Test creating a queued status with position."""
+        status = WorkflowStatus(
+            state=WorkflowState.QUEUED,
+            queue_position=5,
+        )
+
+        assert status.state == WorkflowState.QUEUED
+        assert status.queue_position == 5
+        assert status.progress == 0.0
+
+    def test_create_status_running_with_progress(self) -> None:
+        """Test creating a running status with progress."""
+        status = WorkflowStatus(
+            state=WorkflowState.RUNNING,
+            progress=0.45,
+        )
+
+        assert status.state == WorkflowState.RUNNING
+        assert status.progress == 0.45
+        assert status.queue_position is None
+
+    def test_create_status_completed(self) -> None:
+        """Test creating a completed status."""
+        status = WorkflowStatus(
+            state=WorkflowState.COMPLETED,
+            progress=1.0,
+        )
+
+        assert status.state == WorkflowState.COMPLETED
+        assert status.progress == 1.0
+
+    def test_create_status_failed(self) -> None:
+        """Test creating a failed status."""
+        status = WorkflowStatus(
+            state=WorkflowState.FAILED,
+        )
+
+        assert status.state == WorkflowState.FAILED
+        assert status.progress == 0.0
+
+    def test_create_status_cancelled(self) -> None:
+        """Test creating a cancelled status."""
+        status = WorkflowStatus(
+            state=WorkflowState.CANCELLED,
+        )
+
+        assert status.state == WorkflowState.CANCELLED
+
+    def test_status_requires_state(self) -> None:
+        """Test that state field is required."""
+        with pytest.raises(ValidationError) as exc_info:
+            WorkflowStatus()  # type: ignore
+
+        assert "state" in str(exc_info.value)
+
+    def test_status_default_progress(self) -> None:
+        """Test that progress defaults to 0.0."""
+        status = WorkflowStatus(state=WorkflowState.PENDING)
+
+        assert status.progress == 0.0
+
+    def test_status_progress_validation_min(self) -> None:
+        """Test that progress must be >= 0.0."""
+        with pytest.raises(ValidationError):
+            WorkflowStatus(state=WorkflowState.RUNNING, progress=-0.1)
+
+    def test_status_progress_validation_max(self) -> None:
+        """Test that progress must be <= 1.0."""
+        with pytest.raises(ValidationError):
+            WorkflowStatus(state=WorkflowState.RUNNING, progress=1.5)
+
+    def test_status_progress_zero(self) -> None:
+        """Test that progress can be 0.0."""
+        status = WorkflowStatus(state=WorkflowState.PENDING, progress=0.0)
+
+        assert status.progress == 0.0
+
+    def test_status_progress_one(self) -> None:
+        """Test that progress can be 1.0."""
+        status = WorkflowStatus(state=WorkflowState.COMPLETED, progress=1.0)
+
+        assert status.progress == 1.0
+
+    def test_status_progress_decimal(self) -> None:
+        """Test that progress accepts decimal values."""
+        status = WorkflowStatus(state=WorkflowState.RUNNING, progress=0.333)
+
+        assert status.progress == 0.333
+
+    def test_status_queue_position_positive(self) -> None:
+        """Test queue position with positive integer."""
+        status = WorkflowStatus(
+            state=WorkflowState.QUEUED,
+            queue_position=10,
+        )
+
+        assert status.queue_position == 10
+
+    def test_status_queue_position_zero(self) -> None:
+        """Test that queue position can be 0."""
+        status = WorkflowStatus(
+            state=WorkflowState.QUEUED,
+            queue_position=0,
+        )
+
+        assert status.queue_position == 0
+
+    def test_status_queue_position_negative_invalid(self) -> None:
+        """Test that negative queue position is invalid."""
+        with pytest.raises(ValidationError):
+            WorkflowStatus(
+                state=WorkflowState.QUEUED,
+                queue_position=-1,
+            )
+
+    def test_status_serialization(self) -> None:
+        """Test that status can be serialized to dict/JSON."""
+        status = WorkflowStatus(
+            state=WorkflowState.RUNNING,
+            queue_position=3,
+            progress=0.67,
+        )
+
+        data = status.model_dump()
+
+        assert data["state"] == "running"
+        assert data["queue_position"] == 3
+        assert data["progress"] == 0.67
+
+    def test_status_from_dict(self) -> None:
+        """Test creating status from dictionary."""
+        data = {
+            "state": "queued",
+            "queue_position": 7,
+            "progress": 0.0,
+        }
+
+        status = WorkflowStatus(**data)  # type: ignore[arg-type]
+
+        assert status.state == WorkflowState.QUEUED
+        assert status.queue_position == 7
+        assert status.progress == 0.0
+
+    def test_status_state_from_string(self) -> None:
+        """Test that state can be created from string value."""
+        status = WorkflowStatus(state="pending")  # type: ignore[arg-type]
+
+        assert status.state == WorkflowState.PENDING
+
+    def test_status_all_states_valid(self) -> None:
+        """Test that all WorkflowState enum values work."""
+        for state in WorkflowState:
+            status = WorkflowStatus(state=state)
+            assert status.state == state
+
+    def test_status_invalid_state_string(self) -> None:
+        """Test that invalid state string is rejected."""
+        with pytest.raises(ValidationError):
+            WorkflowStatus(state="invalid_state")  # type: ignore[arg-type]

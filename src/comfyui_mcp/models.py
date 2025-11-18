@@ -6,6 +6,7 @@ nodes, and prompts used for AI image generation.
 
 from __future__ import annotations
 
+from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -282,6 +283,75 @@ class ComfyUIConfig(BaseModel):
     model_config = {"extra": "forbid"}
 
 
+class WorkflowState(str, Enum):
+    """Enumeration of possible workflow execution states.
+
+    Represents the current execution state of a ComfyUI workflow in the
+    processing pipeline, from initial submission through completion or failure.
+
+    Values:
+        PENDING: Workflow has been created but not yet submitted
+        QUEUED: Workflow is waiting in the execution queue
+        RUNNING: Workflow is currently being executed
+        COMPLETED: Workflow execution finished successfully
+        FAILED: Workflow execution failed with an error
+        CANCELLED: Workflow execution was cancelled by user
+
+    Example:
+        >>> status = WorkflowStatus(state=WorkflowState.RUNNING, progress=0.5)
+        >>> if status.state == WorkflowState.COMPLETED:
+        ...     print("Workflow finished!")
+    """
+
+    PENDING = "pending"
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class WorkflowStatus(BaseModel):
+    """Represents the current execution status of a workflow.
+
+    Tracks the state, progress, and queue position of a workflow being
+    processed by ComfyUI. This model is used for monitoring workflow
+    execution and providing real-time status updates.
+
+    Attributes:
+        state: Current execution state (pending, queued, running, etc.)
+        queue_position: Position in execution queue (None if not queued, >= 0 if queued)
+        progress: Execution progress from 0.0 (not started) to 1.0 (complete)
+
+    Example:
+        >>> status = WorkflowStatus(
+        ...     state=WorkflowState.RUNNING,
+        ...     queue_position=None,
+        ...     progress=0.67
+        ... )
+        >>> print(f"Workflow is {status.progress * 100:.0f}% complete")
+        Workflow is 67% complete
+    """
+
+    state: WorkflowState = Field(
+        ...,
+        description="Current workflow execution state",
+    )
+    queue_position: int | None = Field(
+        default=None,
+        ge=0,
+        description="Position in execution queue (None if not queued, >= 0 if queued)",
+    )
+    progress: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Execution progress from 0.0 (not started) to 1.0 (complete)",
+    )
+
+    model_config = {"extra": "forbid"}
+
+
 class TemplateParameter(BaseModel):
     """Represents a parameter definition for a workflow template.
 
@@ -462,6 +532,8 @@ __all__ = [
     "GenerationResult",
     "GenerationRequest",
     "ComfyUIConfig",
+    "WorkflowState",
+    "WorkflowStatus",
     "TemplateParameter",
     "WorkflowTemplate",
 ]
