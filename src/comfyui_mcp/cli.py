@@ -21,6 +21,7 @@ Example:
 from __future__ import annotations
 
 import asyncio
+import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -31,6 +32,7 @@ from comfyui_mcp import __version__
 from comfyui_mcp.comfyui_client import ComfyUIClient
 from comfyui_mcp.config import load_config
 from comfyui_mcp.models import ComfyUIConfig
+from comfyui_mcp.template_manager import WorkflowTemplateManager
 
 
 @click.group()
@@ -214,6 +216,158 @@ def test_connection(ctx: click.Context) -> None:
         # Handle unexpected errors
         click.echo(
             click.style(f"✗ Error testing connection: {e}", fg="red"),
+            err=True,
+        )
+        if verbose:
+            import traceback
+
+            click.echo(traceback.format_exc(), err=True)
+        sys.exit(1)
+
+
+@cli.command("list-templates")
+@click.option(
+    "--detailed",
+    is_flag=True,
+    help="Show detailed template information (name, description, category)",
+)
+@click.option(
+    "--category",
+    type=str,
+    help="Filter templates by category",
+)
+@click.option(
+    "--json",
+    "json_output",
+    is_flag=True,
+    help="Output results as JSON",
+)
+@click.pass_context
+def list_templates(
+    ctx: click.Context,
+    detailed: bool,
+    category: str | None,
+    json_output: bool,
+) -> None:
+    """List available workflow templates.
+
+    This command displays all workflow templates available in the configured
+    template directory. Templates can be filtered by category and displayed
+    in different formats.
+
+    The command uses the template directory from:
+    1. --template-dir command-line option (highest priority)
+    2. Configuration file
+    3. Default (./workflows)
+
+    Output Formats:
+        Default: Simple list of template IDs
+        --detailed: Shows template name, description, and category
+        --json: Outputs machine-readable JSON format
+
+    Examples:
+        # List all templates
+        comfyui list-templates
+
+        # Show detailed information
+        comfyui list-templates --detailed
+
+        # Filter by category
+        comfyui list-templates --category character
+
+        # Get JSON output for scripting
+        comfyui list-templates --json
+    """
+    verbose: bool = ctx.obj.get("verbose", False)
+    template_dir: Path | None = ctx.obj.get("template_dir")
+
+    # Use default template directory if not specified
+    if template_dir is None:
+        template_dir = Path("workflows")
+
+    # Check if template directory exists
+    if not template_dir.exists():
+        if verbose:
+            click.echo(
+                f"Template directory not found: {template_dir}",
+                err=True,
+            )
+        click.echo("No templates found.", err=True)
+        return
+
+    try:
+        # Initialize template manager
+        manager = WorkflowTemplateManager(template_dir)
+
+        # Get templates (filtered by category if specified)
+        if category:
+            template_ids = manager.list_templates_by_category(category)
+        else:
+            template_ids = manager.list_templates()
+
+        # Handle empty results
+        if not template_ids:
+            if json_output:
+                click.echo("[]")
+            else:
+                if category:
+                    click.echo(f"No templates found in category: {category}")
+                else:
+                    click.echo("No templates found.")
+            return
+
+        # JSON output
+        if json_output:
+            if detailed:
+                # Load full template data for JSON output
+                templates_data = []
+                for template_id in template_ids:
+                    template = manager.load_template(template_id)
+                    templates_data.append(
+                        {
+                            "id": template_id,
+                            "name": template.name,
+                            "description": template.description,
+                            "category": template.category,
+                            "parameters": {
+                                name: {
+                                    "type": param.type,
+                                    "description": param.description,
+                                    "default": param.default,
+                                }
+                                for name, param in template.parameters.items()
+                            },
+                        }
+                    )
+                click.echo(json.dumps(templates_data, indent=2))
+            else:
+                # Simple JSON list of IDs
+                click.echo(json.dumps(template_ids))
+            return
+
+        # Detailed output
+        if detailed:
+            click.echo(f"\nFound {len(template_ids)} template(s):\n")
+            for template_id in template_ids:
+                template = manager.load_template(template_id)
+                click.echo(f"ID:          {template_id}")
+                click.echo(f"Name:        {template.name}")
+                click.echo(f"Description: {template.description}")
+                click.echo(f"Category:    {template.category or 'None'}")
+                if template.parameters:
+                    click.echo(f"Parameters:  {len(template.parameters)}")
+                click.echo()
+        else:
+            # Simple list output
+            click.echo(f"\nAvailable templates ({len(template_ids)}):\n")
+            for template_id in template_ids:
+                click.echo(f"  • {template_id}")
+            click.echo()
+
+    except Exception as e:
+        # Handle errors
+        click.echo(
+            click.style(f"Error listing templates: {e}", fg="red"),
             err=True,
         )
         if verbose:
