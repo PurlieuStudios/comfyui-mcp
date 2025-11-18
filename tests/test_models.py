@@ -5,7 +5,12 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from comfyui_mcp.models import WorkflowNode, WorkflowPrompt
+from comfyui_mcp.models import (
+    TemplateParameter,
+    WorkflowNode,
+    WorkflowPrompt,
+    WorkflowTemplate,
+)
 
 
 class TestWorkflowNode:
@@ -215,7 +220,7 @@ class TestWorkflowPrompt:
             "client_id": "test",
         }
 
-        prompt = WorkflowPrompt(**data)
+        prompt = WorkflowPrompt(**data)  # type: ignore[arg-type]
 
         assert prompt.client_id == "test"
         assert "1" in prompt.nodes
@@ -272,3 +277,240 @@ class TestWorkflowPrompt:
 
         assert prompt.nodes["3"].inputs["seed"] == 999
         assert prompt.nodes["5"].inputs["seed"] == 999
+
+
+class TestTemplateParameter:
+    """Tests for TemplateParameter model."""
+
+    def test_create_string_parameter(self) -> None:
+        """Test creating a string template parameter."""
+        param = TemplateParameter(
+            name="prompt",
+            description="Text prompt for generation",
+            type="string",
+            default="a beautiful landscape",
+        )
+
+        assert param.name == "prompt"
+        assert param.description == "Text prompt for generation"
+        assert param.type == "string"
+        assert param.default == "a beautiful landscape"
+        assert param.required is True
+
+    def test_create_int_parameter(self) -> None:
+        """Test creating an integer template parameter."""
+        param = TemplateParameter(
+            name="steps",
+            description="Number of sampling steps",
+            type="int",
+            default=20,
+            required=False,
+        )
+
+        assert param.name == "steps"
+        assert param.type == "int"
+        assert param.default == 20
+        assert param.required is False
+
+    def test_create_float_parameter(self) -> None:
+        """Test creating a float template parameter."""
+        param = TemplateParameter(
+            name="cfg",
+            description="Classifier-free guidance scale",
+            type="float",
+            default=8.0,
+        )
+
+        assert param.type == "float"
+        assert param.default == 8.0
+
+    def test_parameter_requires_fields(self) -> None:
+        """Test that name, description, and type are required."""
+        with pytest.raises(ValidationError) as exc_info:
+            TemplateParameter(description="test", type="string")  # type: ignore
+
+        assert "name" in str(exc_info.value)
+
+    def test_parameter_serialization(self) -> None:
+        """Test parameter serialization to dict."""
+        param = TemplateParameter(
+            name="width",
+            description="Image width",
+            type="int",
+            default=512,
+        )
+
+        data = param.model_dump()
+        assert data == {
+            "name": "width",
+            "description": "Image width",
+            "type": "int",
+            "default": 512,
+            "required": True,
+        }
+
+
+class TestWorkflowTemplate:
+    """Tests for WorkflowTemplate model."""
+
+    def test_create_simple_template(self) -> None:
+        """Test creating a simple workflow template."""
+        template = WorkflowTemplate(
+            name="Simple Template",
+            description="A basic template for testing",
+            parameters={},
+            nodes={},
+        )
+
+        assert template.name == "Simple Template"
+        assert template.description == "A basic template for testing"
+        assert template.parameters == {}
+        assert template.nodes == {}
+
+    def test_create_template_with_metadata(self) -> None:
+        """Test creating a template with full metadata."""
+        template = WorkflowTemplate(
+            name="Character Portrait",
+            description="Generate character portraits for RPGs",
+            category="character",
+            parameters={},
+            nodes={},
+        )
+
+        assert template.name == "Character Portrait"
+        assert template.category == "character"
+
+    def test_create_template_with_parameters(self) -> None:
+        """Test creating a template with parameter definitions."""
+        template = WorkflowTemplate(
+            name="Configurable Template",
+            description="Template with parameters",
+            parameters={
+                "prompt": TemplateParameter(
+                    name="prompt",
+                    description="Text prompt",
+                    type="string",
+                    default="a landscape",
+                ),
+                "steps": TemplateParameter(
+                    name="steps",
+                    description="Sampling steps",
+                    type="int",
+                    default=20,
+                ),
+            },
+            nodes={},
+        )
+
+        assert "prompt" in template.parameters
+        assert "steps" in template.parameters
+        assert template.parameters["prompt"].type == "string"
+        assert template.parameters["steps"].default == 20
+
+    def test_create_template_with_workflow_nodes(self) -> None:
+        """Test creating a template with workflow nodes."""
+        template = WorkflowTemplate(
+            name="Complete Template",
+            description="Template with nodes",
+            parameters={},
+            nodes={
+                "1": WorkflowNode(
+                    class_type="CheckpointLoaderSimple",
+                    inputs={"ckpt_name": "model.safetensors"},
+                ),
+                "2": WorkflowNode(
+                    class_type="KSampler",
+                    inputs={"seed": 123, "steps": 20, "model": ["1", 0]},
+                ),
+            },
+        )
+
+        assert "1" in template.nodes
+        assert "2" in template.nodes
+        assert template.nodes["1"].class_type == "CheckpointLoaderSimple"
+
+    def test_template_requires_name_and_description(self) -> None:
+        """Test that name and description are required."""
+        with pytest.raises(ValidationError) as exc_info:
+            WorkflowTemplate(parameters={}, nodes={})  # type: ignore
+
+        error_str = str(exc_info.value)
+        assert "name" in error_str or "description" in error_str
+
+    def test_template_serialization(self) -> None:
+        """Test template serialization to dict."""
+        template = WorkflowTemplate(
+            name="Test Template",
+            description="For testing",
+            category="test",
+            parameters={
+                "width": TemplateParameter(
+                    name="width", description="Width", type="int", default=512
+                )
+            },
+            nodes={"1": WorkflowNode(class_type="Test", inputs={"param": "value"})},
+        )
+
+        data = template.model_dump()
+
+        assert data["name"] == "Test Template"
+        assert data["category"] == "test"
+        assert "width" in data["parameters"]
+        assert "1" in data["nodes"]
+
+    def test_instantiate_workflow_from_template(self) -> None:
+        """Test creating a WorkflowPrompt instance from template."""
+        template = WorkflowTemplate(
+            name="Character Generator",
+            description="Generate character images",
+            parameters={
+                "prompt": TemplateParameter(
+                    name="prompt",
+                    description="Character description",
+                    type="string",
+                    default="a warrior",
+                ),
+                "seed": TemplateParameter(
+                    name="seed", description="Random seed", type="int", default=123
+                ),
+            },
+            nodes={
+                "1": WorkflowNode(
+                    class_type="CLIPTextEncode",
+                    inputs={"text": "{{prompt}}"},  # Placeholder
+                ),
+                "2": WorkflowNode(
+                    class_type="KSampler",
+                    inputs={"seed": "{{seed}}", "positive": ["1", 0]},  # Placeholders
+                ),
+            },
+        )
+
+        # Instantiate with custom parameters
+        workflow = template.instantiate({"prompt": "a mage", "seed": 456})
+
+        assert isinstance(workflow, WorkflowPrompt)
+        assert "1" in workflow.nodes
+        assert "2" in workflow.nodes
+        assert workflow.nodes["1"].inputs["text"] == "a mage"
+        assert workflow.nodes["2"].inputs["seed"] == 456
+
+    def test_instantiate_uses_defaults(self) -> None:
+        """Test that instantiate uses default parameter values."""
+        template = WorkflowTemplate(
+            name="Test",
+            description="Test template",
+            parameters={
+                "steps": TemplateParameter(
+                    name="steps", description="Steps", type="int", default=20
+                )
+            },
+            nodes={
+                "1": WorkflowNode(class_type="KSampler", inputs={"steps": "{{steps}}"})
+            },
+        )
+
+        # Instantiate without providing steps parameter
+        workflow = template.instantiate({})
+
+        assert workflow.nodes["1"].inputs["steps"] == 20
