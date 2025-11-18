@@ -8,6 +8,7 @@ from aiohttp import ClientConnectorError, ClientResponseError, ClientSession
 from comfyui_mcp.comfyui_client import ComfyUIClient
 from comfyui_mcp.models import (
     ComfyUIConfig,
+    GenerationResult,
     WorkflowNode,
     WorkflowPrompt,
     WorkflowState,
@@ -849,6 +850,269 @@ class TestComfyUIClientQueueStatus:
         # Should raise exception on server error
         with pytest.raises(ClientResponseError):
             await client.get_queue_status("prompt-123")
+
+        # Clean up
+        await client.close()
+
+
+class TestComfyUIClientHistory:
+    """Test ComfyUI client history retrieval for execution results."""
+
+    @pytest.mark.asyncio
+    async def test_get_history_success(self, aiohttp_server):
+        """Test successful history retrieval with generated images."""
+        from aiohttp import web
+
+        async def history_handler(request):
+            prompt_id = request.match_info["prompt_id"]
+            return web.json_response(
+                {
+                    prompt_id: {
+                        "outputs": {
+                            "9": {
+                                "images": [
+                                    {
+                                        "filename": "ComfyUI_00001_.png",
+                                        "subfolder": "",
+                                        "type": "output",
+                                    }
+                                ]
+                            }
+                        },
+                        "status": {"completed": True},
+                    }
+                }
+            )
+
+        app = web.Application()
+        app.router.add_get("/history/{prompt_id}", history_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        client = ComfyUIClient(config)
+
+        # Get history
+        result = await client.get_history("prompt-123")
+
+        assert isinstance(result, GenerationResult)
+        assert len(result.images) == 1
+        assert result.images[0] == "ComfyUI_00001_.png"
+        assert result.prompt_id == "prompt-123"
+
+        # Clean up
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_get_history_with_subfolder(self, aiohttp_server):
+        """Test history retrieval with images in subfolders."""
+        from aiohttp import web
+
+        async def history_handler(request):
+            prompt_id = request.match_info["prompt_id"]
+            return web.json_response(
+                {
+                    prompt_id: {
+                        "outputs": {
+                            "9": {
+                                "images": [
+                                    {
+                                        "filename": "image_001.png",
+                                        "subfolder": "2024-01",
+                                        "type": "output",
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
+            )
+
+        app = web.Application()
+        app.router.add_get("/history/{prompt_id}", history_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        client = ComfyUIClient(config)
+
+        # Get history
+        result = await client.get_history("prompt-456")
+
+        assert len(result.images) == 1
+        assert result.images[0] == "2024-01/image_001.png"
+
+        # Clean up
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_get_history_multiple_images(self, aiohttp_server):
+        """Test history retrieval with multiple generated images."""
+        from aiohttp import web
+
+        async def history_handler(request):
+            prompt_id = request.match_info["prompt_id"]
+            return web.json_response(
+                {
+                    prompt_id: {
+                        "outputs": {
+                            "9": {
+                                "images": [
+                                    {"filename": "image_001.png", "subfolder": ""},
+                                    {"filename": "image_002.png", "subfolder": ""},
+                                    {"filename": "image_003.png", "subfolder": "batch"},
+                                ]
+                            }
+                        }
+                    }
+                }
+            )
+
+        app = web.Application()
+        app.router.add_get("/history/{prompt_id}", history_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        client = ComfyUIClient(config)
+
+        # Get history
+        result = await client.get_history("prompt-789")
+
+        assert len(result.images) == 3
+        assert result.images[0] == "image_001.png"
+        assert result.images[1] == "image_002.png"
+        assert result.images[2] == "batch/image_003.png"
+
+        # Clean up
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_get_history_not_found(self, aiohttp_server):
+        """Test history retrieval when prompt_id not found."""
+        from aiohttp import web
+
+        async def history_handler(request):
+            return web.json_response({})
+
+        app = web.Application()
+        app.router.add_get("/history/{prompt_id}", history_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        client = ComfyUIClient(config)
+
+        # Should raise ValueError when prompt not found
+        with pytest.raises(ValueError, match="not found in history"):
+            await client.get_history("prompt-nonexistent")
+
+        # Clean up
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_get_history_no_outputs(self, aiohttp_server):
+        """Test history retrieval when workflow has no outputs."""
+        from aiohttp import web
+
+        async def history_handler(request):
+            prompt_id = request.match_info["prompt_id"]
+            return web.json_response({prompt_id: {"outputs": {}}})
+
+        app = web.Application()
+        app.router.add_get("/history/{prompt_id}", history_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        client = ComfyUIClient(config)
+
+        # Should raise ValueError when no outputs
+        with pytest.raises(ValueError, match="No outputs found"):
+            await client.get_history("prompt-no-outputs")
+
+        # Clean up
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_get_history_connection_error(self):
+        """Test history retrieval handles connection errors."""
+        config = ComfyUIConfig(url="http://127.0.0.1:9999")
+        client = ComfyUIClient(config)
+
+        # Should raise exception on connection error
+        with pytest.raises(ClientConnectorError):
+            await client.get_history("prompt-123")
+
+        # Clean up
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_get_history_server_error(self, aiohttp_server):
+        """Test history retrieval handles server errors."""
+        from aiohttp import web
+
+        async def history_handler(request):
+            return web.Response(status=500, text="Internal Server Error")
+
+        app = web.Application()
+        app.router.add_get("/history/{prompt_id}", history_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        client = ComfyUIClient(config)
+
+        # Should raise exception on server error
+        with pytest.raises(ClientResponseError):
+            await client.get_history("prompt-123")
+
+        # Clean up
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_get_history_multiple_output_nodes(self, aiohttp_server):
+        """Test history retrieval with multiple output nodes."""
+        from aiohttp import web
+
+        async def history_handler(request):
+            prompt_id = request.match_info["prompt_id"]
+            return web.json_response(
+                {
+                    prompt_id: {
+                        "outputs": {
+                            "5": {
+                                "images": [
+                                    {"filename": "preview_001.png", "subfolder": ""}
+                                ]
+                            },
+                            "9": {
+                                "images": [
+                                    {"filename": "final_001.png", "subfolder": ""},
+                                    {"filename": "final_002.png", "subfolder": "batch"},
+                                ]
+                            },
+                        }
+                    }
+                }
+            )
+
+        app = web.Application()
+        app.router.add_get("/history/{prompt_id}", history_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        client = ComfyUIClient(config)
+
+        # Get history
+        result = await client.get_history("prompt-multi")
+
+        # Should collect images from all output nodes
+        assert len(result.images) == 3
+        assert "preview_001.png" in result.images
+        assert "final_001.png" in result.images
+        assert "batch/final_002.png" in result.images
 
         # Clean up
         await client.close()
