@@ -792,6 +792,105 @@ class WorkflowTemplate(BaseModel):
             # Return primitives as-is
             return obj
 
+    def to_file(self, file_path: Path | str) -> None:
+        """Save workflow template to JSON file.
+
+        Serializes the workflow template to a JSON file with proper formatting.
+        The JSON format includes all template metadata, parameters, and nodes.
+
+        Args:
+            file_path: Path where the JSON file should be saved. If file exists,
+                      it will be overwritten.
+
+        Example:
+            >>> template = WorkflowTemplate(...)
+            >>> template.to_file("workflows/my-template.json")
+        """
+        import json
+
+        if isinstance(file_path, str):
+            file_path = Path(file_path)
+
+        # Convert to dict format for JSON serialization
+        data = {
+            "name": self.name,
+            "description": self.description,
+            "category": self.category,
+            "parameters": {
+                param_name: {
+                    "name": param.name,
+                    "description": param.description,
+                    "type": param.type,
+                    "default": param.default,
+                    "required": param.required,
+                }
+                for param_name, param in self.parameters.items()
+            },
+            "nodes": {
+                node_id: {"class_type": node.class_type, "inputs": node.inputs}
+                for node_id, node in self.nodes.items()
+            },
+        }
+
+        # Write with pretty printing (indent=2)
+        with open(file_path, "w") as f:
+            json.dump(data, f, indent=2)
+
+    @classmethod
+    def from_file(cls, file_path: Path | str) -> WorkflowTemplate:
+        """Load workflow template from JSON file.
+
+        Reads and deserializes a workflow template from a JSON file.
+        The JSON file must contain all required fields (name, description,
+        parameters, nodes).
+
+        Args:
+            file_path: Path to the JSON template file to load
+
+        Returns:
+            WorkflowTemplate instance loaded from the JSON file
+
+        Raises:
+            FileNotFoundError: If the specified file doesn't exist
+            json.JSONDecodeError: If the file contains invalid JSON
+            ValidationError: If the JSON data doesn't match the template schema
+
+        Example:
+            >>> template = WorkflowTemplate.from_file("workflows/character-portrait.json")
+            >>> print(template.name)
+            Character Portrait Generator
+        """
+        import json
+
+        if isinstance(file_path, str):
+            file_path = Path(file_path)
+
+        if not file_path.exists():
+            msg = f"Template file not found: {file_path}"
+            raise FileNotFoundError(msg)
+
+        with open(file_path) as f:
+            data = json.load(f)
+
+        # Convert parameters from dict format to TemplateParameter objects
+        parameters = {}
+        for param_name, param_data in data.get("parameters", {}).items():
+            parameters[param_name] = TemplateParameter(**param_data)
+
+        # Convert nodes from dict format to WorkflowNode objects
+        nodes = {}
+        for node_id, node_data in data.get("nodes", {}).items():
+            nodes[node_id] = WorkflowNode(**node_data)
+
+        # Create and return WorkflowTemplate instance
+        return cls(
+            name=data["name"],
+            description=data["description"],
+            category=data.get("category"),
+            parameters=parameters,
+            nodes=nodes,
+        )
+
 
 __all__ = [
     "WorkflowNode",
