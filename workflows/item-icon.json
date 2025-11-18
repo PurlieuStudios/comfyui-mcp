@@ -1,0 +1,94 @@
+{
+  "name": "Item Icon Generator",
+  "description": "Generates 512x512 centered item icons for game inventories. Optimized for small objects like weapons, potions, and equipment with clean backgrounds.",
+  "category": "item",
+  "parameters": {
+    "item_description": {
+      "name": "item_description",
+      "description": "Description of the item (e.g., 'iron sword', 'health potion', 'leather armor')",
+      "type": "string",
+      "default": "iron sword",
+      "required": true
+    },
+    "background": {
+      "name": "background",
+      "description": "Background style for the icon",
+      "type": "string",
+      "default": "white background, studio lighting",
+      "required": false
+    },
+    "seed": {
+      "name": "seed",
+      "description": "Random seed for reproducibility (-1 for random)",
+      "type": "int",
+      "default": -1,
+      "required": false
+    },
+    "steps": {
+      "name": "steps",
+      "description": "Number of sampling steps",
+      "type": "int",
+      "default": 25,
+      "required": false
+    }
+  },
+  "nodes": {
+    "1": {
+      "class_type": "CheckpointLoaderSimple",
+      "inputs": {
+        "ckpt_name": "v1-5-pruned.safetensors"
+      }
+    },
+    "2": {
+      "class_type": "CLIPTextEncode",
+      "inputs": {
+        "text": "{{item_description}}, centered, {{background}}, isometric view, game icon, detailed",
+        "clip": ["1", 1]
+      }
+    },
+    "3": {
+      "class_type": "CLIPTextEncode",
+      "inputs": {
+        "text": "blurry, low quality, text, watermark, signature",
+        "clip": ["1", 1]
+      }
+    },
+    "4": {
+      "class_type": "EmptyLatentImage",
+      "inputs": {
+        "width": 512,
+        "height": 512,
+        "batch_size": 1
+      }
+    },
+    "5": {
+      "class_type": "KSampler",
+      "inputs": {
+        "seed": "{{seed}}",
+        "steps": "{{steps}}",
+        "cfg": 7.5,
+        "sampler_name": "euler",
+        "scheduler": "normal",
+        "denoise": 1.0,
+        "model": ["1", 0],
+        "positive": ["2", 0],
+        "negative": ["3", 0],
+        "latent_image": ["4", 0]
+      }
+    },
+    "6": {
+      "class_type": "VAEDecode",
+      "inputs": {
+        "samples": ["5", 0],
+        "vae": ["1", 2]
+      }
+    },
+    "7": {
+      "class_type": "SaveImage",
+      "inputs": {
+        "filename_prefix": "item_icon",
+        "images": ["6", 0]
+      }
+    }
+  }
+}
