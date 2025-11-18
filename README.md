@@ -560,7 +560,10 @@ Comprehensive documentation is available in the `docs/` directory:
   - Queue management
   - WebSocket integration
 
-- **[MCP Tool Usage](docs/mcp-tools.md)** *(coming soon)* - MCP tool reference
+- **[MCP Tool Usage](docs/MCP_TOOLS.md)** - Complete MCP tool reference and usage guide
+  - All 5 MCP tools documented
+  - Integration patterns and examples
+  - Best practices and troubleshooting
 - **[Workflow Templates](docs/workflow-templates.md)** *(coming soon)* - Template system guide
 - **[Godot Integration](docs/godot-integration.md)** *(coming soon)* - Godot plugin and examples
 
