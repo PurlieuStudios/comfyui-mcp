@@ -12,6 +12,7 @@ import aiohttp
 
 from comfyui_mcp.models import (
     ComfyUIConfig,
+    GenerationResult,
     WorkflowPrompt,
     WorkflowState,
     WorkflowStatus,
@@ -333,6 +334,95 @@ class ComfyUIClient:
             state=WorkflowState.COMPLETED,
             queue_position=None,
             progress=1.0,
+        )
+
+    async def get_history(self, prompt_id: str) -> GenerationResult:
+        """Get workflow execution history and results for a specific prompt ID.
+
+        This method queries the ComfyUI /history/{prompt_id} endpoint to retrieve
+        execution results including generated images, metadata, and timing information.
+
+        Args:
+            prompt_id: The unique prompt ID returned from submit_workflow
+
+        Returns:
+            GenerationResult containing:
+            - images: List of generated image file paths
+            - execution_time: Time taken for generation (currently 0.0)
+            - metadata: Empty dict (future: workflow parameters, dimensions, etc.)
+            - prompt_id: The prompt ID used for this generation
+            - seed: None (future: extract from workflow if available)
+
+        Raises:
+            aiohttp.ClientError: If there's an HTTP error
+            aiohttp.ClientConnectorError: If cannot connect to server
+            TimeoutError: If the request times out
+            ValueError: If prompt_id not found in history or no outputs available
+
+        Example:
+            >>> config = ComfyUIConfig(url="http://127.0.0.1:8188")
+            >>> client = ComfyUIClient(config)
+            >>> response = await client.submit_workflow(workflow)
+            >>> prompt_id = response["prompt_id"]
+            >>> result = await client.get_history(prompt_id)
+            >>> print(f"Generated images: {result.images}")
+            Generated images: ['output/image_001.png']
+        """
+        base_url = self.config.url.rstrip("/")
+        url = f"{base_url}/history/{prompt_id}"
+
+        # Query the history endpoint
+        async with self.session.get(url) as response:
+            # Raise exception for HTTP errors (4xx, 5xx)
+            response.raise_for_status()
+
+            # Get the history data
+            history_data: dict[str, Any] = await response.json()
+
+        # Check if prompt_id exists in history
+        if prompt_id not in history_data:
+            raise ValueError(f"Prompt ID '{prompt_id}' not found in history")
+
+        # Get the specific prompt history
+        prompt_history: dict[str, Any] = history_data[prompt_id]
+
+        # Extract outputs
+        outputs: dict[str, Any] = prompt_history.get("outputs", {})
+
+        if not outputs:
+            raise ValueError(
+                f"No outputs found for prompt ID '{prompt_id}'. "
+                "Workflow may not have completed yet."
+            )
+
+        # Collect all images from all output nodes
+        image_paths: list[str] = []
+
+        for _node_id, node_output in outputs.items():
+            # Check if this output node has images
+            if "images" in node_output:
+                images_list: list[dict[str, Any]] = node_output["images"]
+
+                for image_info in images_list:
+                    filename: str = image_info.get("filename", "")
+                    subfolder: str = image_info.get("subfolder", "")
+
+                    # Construct full path
+                    if subfolder:
+                        full_path = f"{subfolder}/{filename}"
+                    else:
+                        full_path = filename
+
+                    if full_path:
+                        image_paths.append(full_path)
+
+        # Create and return GenerationResult
+        return GenerationResult(
+            images=image_paths,
+            execution_time=0.0,  # TODO: Extract from history if available
+            metadata={},  # TODO: Extract workflow metadata if needed
+            prompt_id=prompt_id,
+            seed=None,  # TODO: Extract seed from workflow if needed
         )
 
     async def __aenter__(self) -> ComfyUIClient:
