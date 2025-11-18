@@ -573,6 +573,15 @@ Comprehensive documentation is available in the `docs/` directory:
   - Integration with MCP server
   - Complete examples for characters, items, and environments
 
+- **[Workflow Template System](docs/WORKFLOW_TEMPLATES.md)** - Complete workflow template system documentation
+  - Template structure and file format
+  - Creating and using templates
+  - Built-in templates (character, item, environment, pixel art)
+  - Parameter substitution engine
+  - WorkflowTemplateManager usage
+  - Best practices and advanced topics
+  - Complete examples and troubleshooting
+
 - **[Godot Integration](docs/godot-integration.md)** *(coming soon)* - Godot plugin and examples
 
 ---
