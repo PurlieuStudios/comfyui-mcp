@@ -6,6 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from comfyui_mcp.models import (
+    ComfyUIConfig,
     GenerationRequest,
     GenerationResult,
     TemplateParameter,
@@ -845,3 +846,137 @@ class TestGenerationRequest:
         assert request.params["negative_prompt"] == "low quality, blurry"
         assert request.params["cfg_scale"] == 7.5
         assert request.params["denoise"] == 1.0
+
+
+class TestComfyUIConfig:
+    """Tests for ComfyUIConfig model."""
+
+    def test_create_simple_config(self) -> None:
+        """Test creating a simple configuration with just URL."""
+        config = ComfyUIConfig(
+            url="http://127.0.0.1:8188",
+        )
+
+        assert config.url == "http://127.0.0.1:8188"
+        assert config.api_key is None
+        assert config.timeout == 120.0
+        assert config.output_dir is None
+
+    def test_create_config_with_all_fields(self) -> None:
+        """Test creating a configuration with all fields."""
+        config = ComfyUIConfig(
+            url="https://comfyui.example.com",
+            api_key="secret-api-key-123",
+            timeout=60.0,
+            output_dir="/path/to/output",
+        )
+
+        assert config.url == "https://comfyui.example.com"
+        assert config.api_key == "secret-api-key-123"
+        assert config.timeout == 60.0
+        assert config.output_dir == "/path/to/output"
+
+    def test_config_requires_url(self) -> None:
+        """Test that url field is required."""
+        with pytest.raises(ValidationError) as exc_info:
+            ComfyUIConfig()  # type: ignore
+
+        assert "url" in str(exc_info.value)
+
+    def test_config_url_validation(self) -> None:
+        """Test that URL must be valid."""
+        with pytest.raises(ValidationError):
+            ComfyUIConfig(url="not-a-valid-url")
+
+    def test_config_default_timeout(self) -> None:
+        """Test that timeout defaults to 120 seconds."""
+        config = ComfyUIConfig(url="http://localhost:8188")
+
+        assert config.timeout == 120.0
+
+    def test_config_custom_timeout(self) -> None:
+        """Test setting custom timeout."""
+        config = ComfyUIConfig(
+            url="http://localhost:8188",
+            timeout=30.0,
+        )
+
+        assert config.timeout == 30.0
+
+    def test_config_with_api_key(self) -> None:
+        """Test configuration with API key."""
+        config = ComfyUIConfig(
+            url="https://secure-comfyui.com",
+            api_key="my-secret-key",
+        )
+
+        assert config.api_key == "my-secret-key"
+
+    def test_config_with_output_dir(self) -> None:
+        """Test configuration with output directory."""
+        config = ComfyUIConfig(
+            url="http://localhost:8188",
+            output_dir="/game/assets/generated",
+        )
+
+        assert config.output_dir == "/game/assets/generated"
+
+    def test_config_serialization(self) -> None:
+        """Test that config can be serialized to dict/JSON."""
+        config = ComfyUIConfig(
+            url="http://localhost:8188",
+            api_key="test-key",
+            timeout=90.0,
+            output_dir="/output",
+        )
+
+        data = config.model_dump()
+
+        assert data["url"] == "http://localhost:8188"
+        assert data["api_key"] == "test-key"
+        assert data["timeout"] == 90.0
+        assert data["output_dir"] == "/output"
+
+    def test_config_from_dict(self) -> None:
+        """Test creating config from dictionary."""
+        data = {
+            "url": "http://comfyui:8188",
+            "api_key": "key-123",
+            "timeout": 45.0,
+            "output_dir": "/tmp/comfyui",
+        }
+
+        config = ComfyUIConfig(**data)  # type: ignore[arg-type]
+
+        assert config.url == "http://comfyui:8188"
+        assert config.api_key == "key-123"
+        assert config.timeout == 45.0
+        assert config.output_dir == "/tmp/comfyui"
+
+    def test_config_localhost_url(self) -> None:
+        """Test configuration with localhost URL."""
+        config = ComfyUIConfig(url="http://localhost:8188")
+
+        assert config.url == "http://localhost:8188"
+
+    def test_config_https_url(self) -> None:
+        """Test configuration with HTTPS URL."""
+        config = ComfyUIConfig(url="https://secure.comfyui.com:443")
+
+        assert config.url == "https://secure.comfyui.com:443"
+
+    def test_config_ipv4_url(self) -> None:
+        """Test configuration with IPv4 address."""
+        config = ComfyUIConfig(url="http://192.168.1.100:8188")
+
+        assert config.url == "http://192.168.1.100:8188"
+
+    def test_config_negative_timeout_invalid(self) -> None:
+        """Test that negative timeout is invalid."""
+        with pytest.raises(ValidationError):
+            ComfyUIConfig(url="http://localhost:8188", timeout=-1.0)
+
+    def test_config_zero_timeout_invalid(self) -> None:
+        """Test that zero timeout is invalid."""
+        with pytest.raises(ValidationError):
+            ComfyUIConfig(url="http://localhost:8188", timeout=0.0)
