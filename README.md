@@ -564,7 +564,15 @@ Comprehensive documentation is available in the `docs/` directory:
   - All 5 MCP tools documented
   - Integration patterns and examples
   - Best practices and troubleshooting
-- **[Workflow Templates](docs/workflow-templates.md)** *(coming soon)* - Template system guide
+
+- **[Workflow Creation Tutorial](docs/WORKFLOW_TUTORIAL.md)** - Comprehensive guide to creating ComfyUI workflows
+  - Understanding workflow structure and node system
+  - Creating workflows from scratch
+  - Parameter substitution and templates
+  - Advanced techniques (LoRA, ControlNet, batching)
+  - Integration with MCP server
+  - Complete examples for characters, items, and environments
+
 - **[Godot Integration](docs/godot-integration.md)** *(coming soon)* - Godot plugin and examples
 
 ---
