@@ -22,12 +22,14 @@ from comfyui_mcp.models import (
     WorkflowTemplate,
 )
 from comfyui_mcp.retry import retry_with_backoff
+from comfyui_mcp.server import ComfyUIMCPServer
 from comfyui_mcp.template_manager import WorkflowTemplateManager
 
 __version__ = "0.1.0"
 __all__ = [
     "__version__",
     "ComfyUIClient",
+    "ComfyUIMCPServer",
     "ImageGenerator",
     "WorkflowNode",
     "WorkflowPrompt",
