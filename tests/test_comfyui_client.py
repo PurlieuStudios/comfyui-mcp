@@ -238,3 +238,186 @@ class TestComfyUIClientIntegration:
         # Both sessions should be closed
         assert session1.closed
         assert session2.closed
+
+
+class TestComfyUIClientConnectionValidation:
+    """Test ComfyUI client connection validation and health checks."""
+
+    @pytest.mark.asyncio
+    async def test_validate_connection_success(self, aiohttp_server):
+        """Test successful connection validation to ComfyUI server."""
+        from aiohttp import web
+
+        # Create mock ComfyUI server
+        app = web.Application()
+
+        async def queue_handler(request):
+            return web.json_response({"queue_running": [], "queue_pending": []})
+
+        app.router.add_get("/queue", queue_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        comfy_client = ComfyUIClient(config)
+
+        # Validate connection
+        is_connected = await comfy_client.validate_connection()
+
+        assert is_connected is True
+
+        # Clean up
+        await comfy_client.close()
+
+    @pytest.mark.asyncio
+    async def test_validate_connection_server_unreachable(self):
+        """Test connection validation when server is unreachable."""
+        config = ComfyUIConfig(url="http://127.0.0.1:9999")  # Non-existent server
+        client = ComfyUIClient(config)
+
+        is_connected = await client.validate_connection()
+
+        assert is_connected is False
+
+        # Clean up
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_validate_connection_timeout(self):
+        """Test connection validation with timeout."""
+        config = ComfyUIConfig(url="http://10.255.255.1:8188", timeout=0.1)
+        client = ComfyUIClient(config)
+
+        is_connected = await client.validate_connection()
+
+        assert is_connected is False
+
+        # Clean up
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_validate_connection_http_error(self, aiohttp_server):
+        """Test connection validation when server returns HTTP error."""
+        from aiohttp import web
+
+        # Create mock server that returns 500 error
+        app = web.Application()
+
+        async def queue_handler(request):
+            return web.Response(status=500, text="Internal Server Error")
+
+        app.router.add_get("/queue", queue_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        comfy_client = ComfyUIClient(config)
+
+        # Should still return False on HTTP errors
+        is_connected = await comfy_client.validate_connection()
+
+        assert is_connected is False
+
+        # Clean up
+        await comfy_client.close()
+
+    @pytest.mark.asyncio
+    async def test_health_check_returns_server_info(self, aiohttp_server):
+        """Test health check returns server information."""
+        from aiohttp import web
+
+        # Create mock ComfyUI server
+        app = web.Application()
+
+        async def queue_handler(request):
+            return web.json_response({"queue_running": [], "queue_pending": []})
+
+        app.router.add_get("/queue", queue_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        comfy_client = ComfyUIClient(config)
+
+        # Get health check info
+        health_info = await comfy_client.health_check()
+
+        assert health_info["connected"] is True
+        assert "url" in health_info
+        assert health_info["url"] == f"{config.url.rstrip('/')}/queue"
+        assert "status_code" in health_info
+        assert health_info["status_code"] == 200
+
+        # Clean up
+        await comfy_client.close()
+
+    @pytest.mark.asyncio
+    async def test_health_check_server_unreachable(self):
+        """Test health check when server is unreachable."""
+        config = ComfyUIConfig(url="http://127.0.0.1:9999")
+        client = ComfyUIClient(config)
+
+        health_info = await client.health_check()
+
+        assert health_info["connected"] is False
+        assert health_info["url"] == "http://127.0.0.1:9999/queue"
+        assert "error" in health_info
+
+        # Clean up
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_health_check_with_custom_endpoint(self, aiohttp_server):
+        """Test health check can use custom endpoint."""
+        from aiohttp import web
+
+        # Create mock server with custom endpoint
+        app = web.Application()
+
+        async def system_stats_handler(request):
+            return web.json_response({"system": {"os": "linux"}})
+
+        app.router.add_get("/system_stats", system_stats_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        comfy_client = ComfyUIClient(config)
+
+        # Health check with custom endpoint
+        health_info = await comfy_client.health_check(endpoint="/system_stats")
+
+        assert health_info["connected"] is True
+        assert health_info["status_code"] == 200
+
+        # Clean up
+        await comfy_client.close()
+
+    @pytest.mark.asyncio
+    async def test_validate_connection_called_multiple_times(self, aiohttp_server):
+        """Test that validate_connection can be called multiple times."""
+        from aiohttp import web
+
+        app = web.Application()
+
+        async def queue_handler(request):
+            return web.json_response({"queue_running": [], "queue_pending": []})
+
+        app.router.add_get("/queue", queue_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        comfy_client = ComfyUIClient(config)
+
+        # Call multiple times
+        result1 = await comfy_client.validate_connection()
+        result2 = await comfy_client.validate_connection()
+        result3 = await comfy_client.validate_connection()
+
+        assert result1 is True
+        assert result2 is True
+        assert result3 is True
+
+        # Clean up
+        await comfy_client.close()
