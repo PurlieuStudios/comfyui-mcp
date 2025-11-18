@@ -1,0 +1,18 @@
+# ComfyUI MCP Server Configuration - Production Environment
+# Optimized for production deployment
+
+[comfyui]
+# Production ComfyUI server with HTTPS
+url = "https://comfyui.production.example.com"
+
+# Longer timeout for production workloads
+timeout = 300.0
+
+# Production output directory
+# Use absolute path on production server
+output_dir = "/var/app/generated_images"
+
+# API key MUST be set via environment variable in production:
+# export COMFYUI_API_KEY=your-production-api-key
+#
+# Never commit production API keys to version control!

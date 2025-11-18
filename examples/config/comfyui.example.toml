@@ -1,0 +1,29 @@
+# ComfyUI MCP Server Configuration Example
+# Copy this file to comfyui.toml and customize for your environment
+#
+# Documentation: https://github.com/PurlieuStudios/comfyui-mcp/blob/master/docs/CONFIGURATION.md
+
+[comfyui]
+# ComfyUI server URL (required)
+# Must start with http:// or https://
+# Trailing slashes are automatically removed
+url = "http://localhost:8188"
+
+# API key for authentication (optional)
+# Minimum 8 characters if provided
+# Recommended: Set via COMFYUI_API_KEY environment variable instead
+# api_key = "your-api-key-here"
+
+# Request timeout in seconds (optional, default: 120.0)
+# Range: 1.0 - 3600.0 seconds (1 second to 1 hour)
+# Adjust based on your workflow complexity:
+#   - Simple workflows: 30-60 seconds
+#   - Standard workflows: 60-120 seconds
+#   - Complex/high-res workflows: 180-300 seconds
+#   - Upscaling/video: 300-600 seconds
+timeout = 120.0
+
+# Output directory for generated images (optional)
+# Can be absolute or relative path
+# Directory will be created if it doesn't exist
+# output_dir = "./generated_images"

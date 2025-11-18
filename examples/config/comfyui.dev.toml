@@ -1,0 +1,16 @@
+# ComfyUI MCP Server Configuration - Development Environment
+# Optimized for local development and testing
+
+[comfyui]
+# Local ComfyUI server
+url = "http://localhost:8188"
+
+# Faster timeout for local testing
+timeout = 60.0
+
+# Development output directory
+output_dir = "./dev_output"
+
+# API key (optional for local development)
+# If your local ComfyUI requires authentication, set via environment:
+# export COMFYUI_API_KEY=your-dev-key
