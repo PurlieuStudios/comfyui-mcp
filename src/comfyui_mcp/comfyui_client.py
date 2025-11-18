@@ -17,6 +17,7 @@ from comfyui_mcp.models import (
     WorkflowState,
     WorkflowStatus,
 )
+from comfyui_mcp.retry import retry_with_backoff
 
 if TYPE_CHECKING:
     from types import TracebackType
@@ -117,6 +118,7 @@ class ComfyUIClient:
         if self._session is not None and not self._session.closed:
             await self._session.close()
 
+    @retry_with_backoff()
     async def validate_connection(self) -> bool:
         """Validate connection to the ComfyUI server.
 
@@ -209,6 +211,7 @@ class ComfyUIClient:
 
         return result
 
+    @retry_with_backoff()
     async def submit_workflow(self, workflow: WorkflowPrompt) -> dict[str, Any]:
         """Submit a workflow to ComfyUI for execution.
 
@@ -266,6 +269,7 @@ class ComfyUIClient:
             result: dict[str, Any] = await response.json()
             return result
 
+    @retry_with_backoff()
     async def get_queue_status(self, prompt_id: str) -> WorkflowStatus:
         """Get queue status for a specific workflow by prompt ID.
 
@@ -336,6 +340,7 @@ class ComfyUIClient:
             progress=1.0,
         )
 
+    @retry_with_backoff()
     async def get_history(self, prompt_id: str) -> GenerationResult:
         """Get workflow execution history and results for a specific prompt ID.
 
@@ -425,6 +430,7 @@ class ComfyUIClient:
             seed=None,  # TODO: Extract seed from workflow if needed
         )
 
+    @retry_with_backoff()
     async def download_image(
         self, filename: str, subfolder: str = "", image_type: str = "output"
     ) -> bytes:
@@ -483,6 +489,7 @@ class ComfyUIClient:
             image_bytes: bytes = await response.read()
             return image_bytes
 
+    @retry_with_backoff()
     async def cancel_workflow(
         self,
         prompt_id: str | list[str] | None = None,

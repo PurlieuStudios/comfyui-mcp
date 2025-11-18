@@ -19,6 +19,7 @@ from comfyui_mcp.models import (
     WorkflowStatus,
     WorkflowTemplate,
 )
+from comfyui_mcp.retry import retry_with_backoff
 
 __version__ = "0.1.0"
 __all__ = [
@@ -33,4 +34,5 @@ __all__ = [
     "WorkflowStatus",
     "TemplateParameter",
     "WorkflowTemplate",
+    "retry_with_backoff",
 ]
