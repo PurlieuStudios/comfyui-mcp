@@ -7,6 +7,7 @@ nodes, and prompts used for AI image generation.
 from __future__ import annotations
 
 from enum import Enum
+from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
@@ -449,6 +450,105 @@ class ComfyUIConfig(BaseModel):
             output_dir=output_dir,
         )
 
+    @classmethod
+    def from_file(cls, config_path: Path | str | None = None) -> ComfyUIConfig:
+        """Load configuration from TOML file.
+
+        Loads configuration from a TOML file with a [comfyui] section.
+        If config_path is None, searches for configuration files in standard
+        locations (current directory, user config, system config).
+
+        Args:
+            config_path: Path to TOML configuration file. If None, searches
+                         standard locations in this order:
+                         1. ./comfyui.toml (current directory)
+                         2. ~/.config/comfyui/comfyui.toml (user config)
+                         3. /etc/comfyui/comfyui.toml (system config, Unix only)
+
+        Returns:
+            ComfyUIConfig instance with values loaded from the configuration file.
+            Any fields not specified in the file use their default values.
+
+        Raises:
+            FileNotFoundError: If config_path is provided but doesn't exist, or
+                               if config_path is None and no config file is found
+                               in standard locations.
+            ValueError: If the TOML file doesn't contain a [comfyui] section.
+            ValidationError: If configuration values fail validation (e.g., invalid
+                             URL, timeout out of range, API key too short).
+
+        Example:
+            >>> # Load from specific file
+            >>> config = ComfyUIConfig.from_file("/path/to/config.toml")
+            >>> print(config.url)
+            http://localhost:8188
+
+            >>> # Load from standard locations (searches automatically)
+            >>> config = ComfyUIConfig.from_file()
+            >>> print(config.timeout)
+            120.0
+        """
+        import os
+        from pathlib import Path
+
+        try:
+            import tomllib  # Python 3.11+
+        except ImportError:
+            import tomli as tomllib
+
+        # Import here to avoid circular dependency
+        from comfyui_mcp.config import find_config_file
+
+        # If no path provided, search standard locations
+        if config_path is None:
+            config_path = find_config_file()
+            if config_path is None:
+                msg = (
+                    "No config file found in standard locations. "
+                    "Searched: ./comfyui.toml, ~/.config/comfyui/comfyui.toml"
+                )
+                if os.name != "nt":
+                    msg += ", /etc/comfyui/comfyui.toml"
+                raise FileNotFoundError(msg)
+
+        # Convert to Path if string
+        if isinstance(config_path, str):
+            config_path = Path(config_path)
+
+        # Check file exists
+        if not config_path.exists():
+            msg = f"Configuration file not found: {config_path}"
+            raise FileNotFoundError(msg)
+
+        # Load TOML file
+        with open(config_path, "rb") as f:
+            toml_data = tomllib.load(f)
+
+        # Check for [comfyui] section
+        if "comfyui" not in toml_data:
+            msg = f"Config file must contain [comfyui] section: {config_path}"
+            raise ValueError(msg)
+
+        config_section = toml_data["comfyui"]
+
+        # Extract fields (use defaults if not specified)
+        url = config_section.get("url")
+        if url is None:
+            msg = "Config file must specify 'url' in [comfyui] section"
+            raise ValueError(msg)
+
+        api_key = config_section.get("api_key")
+        timeout = config_section.get("timeout", 120.0)
+        output_dir = config_section.get("output_dir")
+
+        # Create config instance (validators will run automatically)
+        return cls(
+            url=url,
+            api_key=api_key,
+            timeout=float(timeout),
+            output_dir=output_dir,
+        )
+
 
 class WorkflowState(str, Enum):
     """Enumeration of possible workflow execution states.
@@ -691,6 +791,123 @@ class WorkflowTemplate(BaseModel):
         else:
             # Return primitives as-is
             return obj
+
+    def to_file(self, file_path: Path | str) -> None:
+        """Save workflow template to JSON file.
+
+        Serializes the workflow template to a JSON file with proper formatting.
+        The JSON format includes all template metadata, parameters, and nodes.
+
+        Args:
+            file_path: Path where the JSON file should be saved. If file exists,
+                      it will be overwritten.
+
+        Example:
+            >>> template = WorkflowTemplate(...)
+            >>> template.to_file("workflows/my-template.json")
+        """
+        import json
+
+        if isinstance(file_path, str):
+            file_path = Path(file_path)
+
+        # Convert to dict format for JSON serialization
+        data = {
+            "name": self.name,
+            "description": self.description,
+            "category": self.category,
+            "parameters": {
+                param_name: {
+                    "name": param.name,
+                    "description": param.description,
+                    "type": param.type,
+                    "default": param.default,
+                    "required": param.required,
+                }
+                for param_name, param in self.parameters.items()
+            },
+            "nodes": {
+                node_id: {"class_type": node.class_type, "inputs": node.inputs}
+                for node_id, node in self.nodes.items()
+            },
+        }
+
+        # Write with pretty printing (indent=2)
+        with open(file_path, "w") as f:
+            json.dump(data, f, indent=2)
+
+    @classmethod
+    def from_file(cls, file_path: Path | str) -> WorkflowTemplate:
+        """Load workflow template from JSON file.
+
+        Reads and deserializes a workflow template from a JSON file.
+        The JSON file must contain all required fields (name, description,
+        parameters, nodes).
+
+        Args:
+            file_path: Path to the JSON template file to load
+
+        Returns:
+            WorkflowTemplate instance loaded from the JSON file
+
+        Raises:
+            FileNotFoundError: If the specified file doesn't exist
+            json.JSONDecodeError: If the file contains invalid JSON
+            ValidationError: If the JSON data doesn't match the template schema
+
+        Example:
+            >>> template = WorkflowTemplate.from_file("workflows/character-portrait.json")
+            >>> print(template.name)
+            Character Portrait Generator
+        """
+        import json
+
+        if isinstance(file_path, str):
+            file_path = Path(file_path)
+
+        if not file_path.exists():
+            msg = f"Template file not found: {file_path}"
+            raise FileNotFoundError(msg)
+
+        with open(file_path) as f:
+            data = json.load(f)
+
+        # Convert parameters from dict format to TemplateParameter objects
+        parameters = {}
+        for param_name, param_data in data.get("parameters", {}).items():
+            parameters[param_name] = TemplateParameter(**param_data)
+
+        # Convert nodes from dict format to WorkflowNode objects
+        nodes = {}
+        for node_id, node_data in data.get("nodes", {}).items():
+            nodes[node_id] = WorkflowNode(**node_data)
+
+        # Create and return WorkflowTemplate instance
+        # Let Pydantic handle validation of required fields
+        try:
+            return cls(
+                name=data["name"],
+                description=data["description"],
+                category=data.get("category"),
+                parameters=parameters,
+                nodes=nodes,
+            )
+        except KeyError as e:
+            from pydantic import ValidationError as PydanticValidationError
+
+            # Convert KeyError to ValidationError for missing required fields
+            msg = f"Missing required field: {e}"
+            raise PydanticValidationError.from_exception_data(
+                "WorkflowTemplate",
+                [
+                    {  # type: ignore[typeddict-unknown-key]
+                        "type": "missing",
+                        "loc": (str(e).strip("'"),),
+                        "msg": "Field required",
+                        "input": data,
+                    }
+                ],
+            ) from e
 
 
 __all__ = [
