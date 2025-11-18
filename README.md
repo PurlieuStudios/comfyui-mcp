@@ -315,6 +315,30 @@ When multiple methods are used:
 3. **TOML configuration file**
 4. **Default values** (lowest priority)
 
+### Example Configuration Files
+
+Complete example configuration files are available in `examples/config/`:
+
+| File | Description | Use Case |
+|------|-------------|----------|
+| `comfyui.minimal.toml` | Minimal configuration with only required settings | Quick start, beginners |
+| `comfyui.example.toml` | Standard configuration with common options | General development |
+| `comfyui.dev.toml` | Development environment settings | Local development |
+| `comfyui.prod.toml` | Production environment settings | Production deployment |
+| `comfyui.test.toml` | Testing and CI/CD configuration | Automated testing |
+| `comfyui.docker.toml` | Docker and Kubernetes deployment | Containerized environments |
+| `comfyui.advanced.toml` | Comprehensive reference with all options | Complete documentation |
+| `.env.example` | Environment variables template | Docker, CI/CD |
+
+**Quick start:**
+```bash
+# Copy minimal config to get started
+cp examples/config/comfyui.minimal.toml comfyui.toml
+
+# Or use a specific environment
+cp examples/config/comfyui.dev.toml comfyui.toml
+```
+
 See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for comprehensive configuration documentation.
 
 ---

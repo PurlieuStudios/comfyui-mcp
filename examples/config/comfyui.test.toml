@@ -1,0 +1,41 @@
+# ComfyUI MCP Server Configuration - Testing Environment
+# Optimized for automated testing and CI/CD pipelines
+
+[comfyui]
+# Test ComfyUI server (typically a mock or test instance)
+# For CI/CD, this might be a containerized ComfyUI instance
+url = "http://localhost:8188"
+
+# Short timeout for unit/integration tests
+# Tests should complete quickly to maintain fast feedback loops
+timeout = 30.0
+
+# Test output directory (cleaned between test runs)
+output_dir = "./test_output"
+
+# API key for test environment (set via environment variable)
+# In CI/CD:
+#   export COMFYUI_API_KEY=test-api-key-for-ci
+# Never commit real credentials to version control!
+
+# Additional test configuration notes:
+#
+# 1. Mock Server Setup:
+#    For unit tests, use the mock ComfyUI server provided in tests/
+#    No real ComfyUI instance required for most tests.
+#
+# 2. Integration Tests:
+#    For integration tests, ensure a real ComfyUI instance is running
+#    at the URL specified above. Use Docker for consistency:
+#      docker run -d -p 8188:8188 comfyanonymous/comfyui
+#
+# 3. CI/CD Pipeline:
+#    - Set COMFYUI_URL via environment variable if needed
+#    - Use short timeout to fail fast on errors
+#    - Clean test_output directory before each test run
+#    - Mock external dependencies when possible
+#
+# 4. Test Data:
+#    - Store test workflows in tests/fixtures/
+#    - Use deterministic seeds for reproducible results
+#    - Keep test images small to speed up tests

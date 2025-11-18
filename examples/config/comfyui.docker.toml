@@ -1,0 +1,324 @@
+# ComfyUI MCP Server - Docker Configuration
+# Optimized for containerized deployments using Docker and Docker Compose
+
+[comfyui]
+# ============================================================================
+# DOCKER NETWORKING
+# ============================================================================
+
+# ComfyUI Server URL in Docker environment
+#
+# Docker Networking Scenarios:
+#
+# 1. Docker Compose (containers in same network):
+#    Use the service name from docker-compose.yml
+#    Example: url = "http://comfyui:8188"
+#
+# 2. Docker Compose (different networks):
+#    Use container name or create a shared network
+#    Example: url = "http://comfyui-container:8188"
+#
+# 3. Host Network Mode:
+#    Use localhost when using --network=host
+#    Example: url = "http://localhost:8188"
+#
+# 4. Bridge Network (default):
+#    Use container IP or link containers
+#    Example: url = "http://172.17.0.2:8188"
+#
+# 5. External ComfyUI Server:
+#    Use host.docker.internal to reach host machine
+#    Example: url = "http://host.docker.internal:8188"
+#
+# Recommended: Use Docker Compose service names for reliability
+url = "http://comfyui:8188"
+
+# ============================================================================
+# TIMEOUT CONFIGURATION
+# ============================================================================
+
+# Longer timeout for containerized environments
+#
+# Container-specific considerations:
+#   - First-time model loading takes longer (downloading, caching)
+#   - Container startup time may be significant
+#   - Network overhead between containers
+#   - Resource constraints (CPU/GPU limits)
+#
+# Recommended: Use higher timeouts than local development
+timeout = 180.0
+
+# ============================================================================
+# OUTPUT DIRECTORY
+# ============================================================================
+
+# Output directory for generated images
+#
+# Docker Volume Mounting Best Practices:
+#   - Always use volume mounts for persistent data
+#   - Use absolute paths inside the container
+#   - Mount the same volume in both containers if sharing files
+#   - Use named volumes for production deployments
+#
+# Example volume mount in docker-compose.yml:
+#   volumes:
+#     - comfyui-output:/app/output
+#     - ./generated_images:/app/output  # Or bind mount for development
+#
+# This path should match your volume mount point inside the container
+output_dir = "/app/output"
+
+# ============================================================================
+# AUTHENTICATION
+# ============================================================================
+
+# API Key for authentication
+#
+# CRITICAL: NEVER hardcode credentials in Docker images!
+#
+# Best Practices for Docker:
+#   1. Use Docker secrets (Docker Swarm/Kubernetes):
+#      docker secret create comfyui_api_key ./api_key.txt
+#
+#   2. Use environment variables (Docker Compose):
+#      environment:
+#        - COMFYUI_API_KEY=${COMFYUI_API_KEY}
+#
+#   3. Use .env file with docker-compose (NEVER commit to git):
+#      # .env file
+#      COMFYUI_API_KEY=your-secret-key-here
+#
+#   4. Use external secret management (Vault, AWS Secrets Manager):
+#      Inject at runtime, never bake into images
+#
+# Uncomment if needed (prefer environment variable):
+# api_key = "your-api-key-here"
+
+# ============================================================================
+# DOCKER COMPOSE EXAMPLE
+# ============================================================================
+#
+# Example docker-compose.yml for this configuration:
+#
+# version: '3.8'
+# services:
+#   comfyui:
+#     image: comfyanonymous/comfyui:latest
+#     container_name: comfyui
+#     ports:
+#       - "8188:8188"
+#     volumes:
+#       - comfyui-output:/output
+#       - comfyui-models:/models
+#     deploy:
+#       resources:
+#         reservations:
+#           devices:
+#             - driver: nvidia
+#               count: 1
+#               capabilities: [gpu]
+#
+#   comfyui-mcp:
+#     image: your-org/comfyui-mcp:latest
+#     container_name: comfyui-mcp
+#     depends_on:
+#       - comfyui
+#     environment:
+#       - COMFYUI_URL=http://comfyui:8188
+#       - COMFYUI_TIMEOUT=180.0
+#       - COMFYUI_OUTPUT_DIR=/app/output
+#       - COMFYUI_API_KEY=${COMFYUI_API_KEY}
+#     volumes:
+#       - comfyui-output:/app/output:ro  # Read-only access to generated images
+#     networks:
+#       - comfyui-network
+#
+# volumes:
+#   comfyui-output:
+#   comfyui-models:
+#
+# networks:
+#   comfyui-network:
+#     driver: bridge
+
+# ============================================================================
+# KUBERNETES CONFIGURATION EXAMPLE
+# ============================================================================
+#
+# For Kubernetes deployments, use ConfigMap for configuration:
+#
+# apiVersion: v1
+# kind: ConfigMap
+# metadata:
+#   name: comfyui-mcp-config
+#   namespace: comfyui
+# data:
+#   comfyui.toml: |
+#     [comfyui]
+#     url = "http://comfyui-service.comfyui.svc.cluster.local:8188"
+#     timeout = 180.0
+#     output_dir = "/app/output"
+# ---
+# apiVersion: v1
+# kind: Secret
+# metadata:
+#   name: comfyui-api-key
+#   namespace: comfyui
+# type: Opaque
+# stringData:
+#   api-key: "your-secure-api-key"
+# ---
+# apiVersion: apps/v1
+# kind: Deployment
+# metadata:
+#   name: comfyui-mcp
+# spec:
+#   template:
+#     spec:
+#       containers:
+#       - name: comfyui-mcp
+#         image: your-org/comfyui-mcp:latest
+#         env:
+#         - name: COMFYUI_API_KEY
+#           valueFrom:
+#             secretKeyRef:
+#               name: comfyui-api-key
+#               key: api-key
+#         volumeMounts:
+#         - name: config
+#           mountPath: /app/config
+#           readOnly: true
+#         - name: output
+#           mountPath: /app/output
+#       volumes:
+#       - name: config
+#         configMap:
+#           name: comfyui-mcp-config
+#       - name: output
+#         persistentVolumeClaim:
+#           claimName: comfyui-output-pvc
+
+# ============================================================================
+# DOCKERFILE EXAMPLE
+# ============================================================================
+#
+# Example Dockerfile for building the ComfyUI MCP Server image:
+#
+# FROM python:3.11-slim
+#
+# # Install system dependencies
+# RUN apt-get update && apt-get install -y \
+#     git \
+#     && rm -rf /var/lib/apt/lists/*
+#
+# # Set working directory
+# WORKDIR /app
+#
+# # Copy requirements and install Python dependencies
+# COPY requirements.txt .
+# RUN pip install --no-cache-dir -r requirements.txt
+#
+# # Copy application code
+# COPY comfyui_mcp/ ./comfyui_mcp/
+#
+# # Create output directory
+# RUN mkdir -p /app/output
+#
+# # Non-root user for security
+# RUN useradd -m -u 1000 appuser && \
+#     chown -R appuser:appuser /app
+# USER appuser
+#
+# # Health check
+# HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+#   CMD python -c "import requests; requests.get('http://localhost:8188/system_stats')"
+#
+# # Run the server
+# CMD ["python", "-m", "comfyui_mcp.server"]
+
+# ============================================================================
+# ENVIRONMENT VARIABLES (Recommended for Docker)
+# ============================================================================
+#
+# Instead of using this TOML file in Docker, prefer environment variables:
+#
+# Environment Variable Mapping:
+#   COMFYUI_URL         → url
+#   COMFYUI_API_KEY     → api_key
+#   COMFYUI_TIMEOUT     → timeout
+#   COMFYUI_OUTPUT_DIR  → output_dir
+#
+# Example docker run command:
+#   docker run -d \
+#     --name comfyui-mcp \
+#     --network comfyui-network \
+#     -e COMFYUI_URL=http://comfyui:8188 \
+#     -e COMFYUI_TIMEOUT=180.0 \
+#     -e COMFYUI_OUTPUT_DIR=/app/output \
+#     -e COMFYUI_API_KEY=your-secret-key \
+#     -v comfyui-output:/app/output:ro \
+#     your-org/comfyui-mcp:latest
+#
+# Example docker-compose.yml with .env file:
+#   services:
+#     comfyui-mcp:
+#       image: your-org/comfyui-mcp:latest
+#       environment:
+#         - COMFYUI_URL=${COMFYUI_URL:-http://comfyui:8188}
+#         - COMFYUI_TIMEOUT=${COMFYUI_TIMEOUT:-180.0}
+#         - COMFYUI_OUTPUT_DIR=${COMFYUI_OUTPUT_DIR:-/app/output}
+#         - COMFYUI_API_KEY=${COMFYUI_API_KEY}
+
+# ============================================================================
+# TROUBLESHOOTING
+# ============================================================================
+#
+# Common Docker Issues:
+#
+# 1. Cannot connect to ComfyUI:
+#    - Verify containers are on the same network: docker network ls
+#    - Check ComfyUI container is running: docker ps
+#    - Test connectivity: docker exec comfyui-mcp ping comfyui
+#    - Check ComfyUI logs: docker logs comfyui
+#
+# 2. Permission denied for output directory:
+#    - Ensure volume permissions are correct
+#    - Check container user: docker exec comfyui-mcp whoami
+#    - Fix permissions: docker exec -u root comfyui-mcp chown -R appuser /app/output
+#
+# 3. Timeout errors in containers:
+#    - Increase timeout value (containers may be slower)
+#    - Check container resource limits: docker stats
+#    - Verify GPU access: docker exec comfyui nvidia-smi
+#
+# 4. API key not working:
+#    - Verify environment variable is set: docker exec comfyui-mcp env | grep COMFYUI
+#    - Check for extra whitespace in .env file
+#    - Ensure secrets are mounted correctly
+#
+# 5. Images not saved:
+#    - Verify volume mount is correct: docker inspect comfyui-mcp
+#    - Check disk space: docker system df
+#    - Verify output_dir path matches volume mount
+
+# ============================================================================
+# PRODUCTION DEPLOYMENT CHECKLIST
+# ============================================================================
+#
+# Before deploying to production:
+#
+# [ ] Use environment variables for all configuration
+# [ ] Store API keys in secrets management system
+# [ ] Configure health checks and readiness probes
+# [ ] Set resource limits (CPU/memory/GPU)
+# [ ] Use persistent volumes for generated images
+# [ ] Configure log aggregation (stdout/stderr to logging system)
+# [ ] Set up monitoring and alerting
+# [ ] Use multi-stage builds to minimize image size
+# [ ] Scan images for vulnerabilities
+# [ ] Run containers as non-root user
+# [ ] Configure network policies for security
+# [ ] Set up automated backups for persistent data
+# [ ] Test disaster recovery procedures
+# [ ] Document container orchestration setup
+# [ ] Configure auto-scaling if needed

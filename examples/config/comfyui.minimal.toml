@@ -1,0 +1,22 @@
+# ComfyUI MCP Server - Minimal Configuration
+# Quick start configuration with only required settings
+
+[comfyui]
+# ComfyUI server URL (required)
+url = "http://localhost:8188"
+
+# That's it! This is the minimum configuration needed.
+# All other settings use sensible defaults:
+#   - timeout: 120.0 seconds
+#   - api_key: none (not required for local ComfyUI)
+#   - output_dir: not set (images saved to ComfyUI's default location)
+
+# To use this configuration:
+#   1. Copy this file to 'comfyui.toml' in your project root
+#   2. Update the URL if your ComfyUI runs on a different host/port
+#   3. Start using the ComfyUI MCP Server!
+
+# For more configuration options, see:
+#   - comfyui.example.toml (comprehensive example with all options)
+#   - comfyui.dev.toml (development settings)
+#   - comfyui.prod.toml (production settings)
