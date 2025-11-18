@@ -6,6 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from comfyui_mcp.models import (
+    GenerationRequest,
     GenerationResult,
     TemplateParameter,
     WorkflowNode,
@@ -679,3 +680,168 @@ class TestGenerationResult:
         assert result.metadata["steps"] == 20
         assert result.prompt_id == "abc"
         assert result.seed == 123
+
+
+class TestGenerationRequest:
+    """Tests for GenerationRequest model."""
+
+    def test_create_simple_request(self) -> None:
+        """Test creating a simple generation request with minimal fields."""
+        request = GenerationRequest(
+            template_id="character-portrait",
+        )
+
+        assert request.template_id == "character-portrait"
+        assert request.params == {}
+        assert request.output_settings == {}
+
+    def test_create_request_with_params(self) -> None:
+        """Test creating a request with template parameters."""
+        request = GenerationRequest(
+            template_id="character-portrait",
+            params={
+                "prompt": "a warrior in armor",
+                "seed": 42,
+                "steps": 20,
+            },
+        )
+
+        assert request.template_id == "character-portrait"
+        assert request.params["prompt"] == "a warrior in armor"
+        assert request.params["seed"] == 42
+        assert request.params["steps"] == 20
+
+    def test_create_request_with_output_settings(self) -> None:
+        """Test creating a request with output settings."""
+        request = GenerationRequest(
+            template_id="item-icon",
+            output_settings={
+                "output_dir": "/path/to/output",
+                "format": "png",
+                "quality": 95,
+            },
+        )
+
+        assert request.template_id == "item-icon"
+        assert request.output_settings["output_dir"] == "/path/to/output"
+        assert request.output_settings["format"] == "png"
+        assert request.output_settings["quality"] == 95
+
+    def test_create_request_with_all_fields(self) -> None:
+        """Test creating a request with all fields populated."""
+        request = GenerationRequest(
+            template_id="environment-texture",
+            params={
+                "prompt": "grass texture, seamless",
+                "width": 512,
+                "height": 512,
+                "seed": 999,
+            },
+            output_settings={
+                "output_dir": "/game/assets/textures",
+                "format": "png",
+                "filename_prefix": "grass_",
+            },
+        )
+
+        assert request.template_id == "environment-texture"
+        assert len(request.params) == 4
+        assert request.params["prompt"] == "grass texture, seamless"
+        assert request.params["width"] == 512
+        assert len(request.output_settings) == 3
+        assert request.output_settings["filename_prefix"] == "grass_"
+
+    def test_request_requires_template_id(self) -> None:
+        """Test that template_id field is required."""
+        with pytest.raises(ValidationError) as exc_info:
+            GenerationRequest()  # type: ignore
+
+        assert "template_id" in str(exc_info.value)
+
+    def test_request_params_default_empty_dict(self) -> None:
+        """Test that params defaults to empty dict."""
+        request = GenerationRequest(template_id="test-template")
+
+        assert request.params == {}
+        assert isinstance(request.params, dict)
+
+    def test_request_output_settings_default_empty_dict(self) -> None:
+        """Test that output_settings defaults to empty dict."""
+        request = GenerationRequest(template_id="test-template")
+
+        assert request.output_settings == {}
+        assert isinstance(request.output_settings, dict)
+
+    def test_request_params_various_types(self) -> None:
+        """Test that params can contain various value types."""
+        request = GenerationRequest(
+            template_id="test",
+            params={
+                "string_param": "value",
+                "int_param": 42,
+                "float_param": 3.14,
+                "bool_param": True,
+                "list_param": [1, 2, 3],
+                "dict_param": {"nested": "value"},
+            },
+        )
+
+        assert request.params["string_param"] == "value"
+        assert request.params["int_param"] == 42
+        assert request.params["float_param"] == 3.14
+        assert request.params["bool_param"] is True
+        assert request.params["list_param"] == [1, 2, 3]
+        assert request.params["dict_param"]["nested"] == "value"
+
+    def test_request_serialization(self) -> None:
+        """Test that request can be serialized to dict/JSON."""
+        request = GenerationRequest(
+            template_id="character-portrait",
+            params={"prompt": "a mage", "seed": 123},
+            output_settings={"format": "png"},
+        )
+
+        data = request.model_dump()
+
+        assert data["template_id"] == "character-portrait"
+        assert data["params"] == {"prompt": "a mage", "seed": 123}
+        assert data["output_settings"] == {"format": "png"}
+
+    def test_request_from_dict(self) -> None:
+        """Test creating request from dictionary."""
+        data = {
+            "template_id": "item-icon",
+            "params": {"prompt": "sword icon", "steps": 30},
+            "output_settings": {"output_dir": "/output"},
+        }
+
+        request = GenerationRequest(**data)  # type: ignore[arg-type]
+
+        assert request.template_id == "item-icon"
+        assert request.params["prompt"] == "sword icon"
+        assert request.params["steps"] == 30
+        assert request.output_settings["output_dir"] == "/output"
+
+    def test_request_empty_template_id_invalid(self) -> None:
+        """Test that empty template_id is invalid."""
+        with pytest.raises(ValidationError):
+            GenerationRequest(template_id="")
+
+    def test_request_with_workflow_specific_params(self) -> None:
+        """Test request with ComfyUI-specific workflow parameters."""
+        request = GenerationRequest(
+            template_id="advanced-workflow",
+            params={
+                "positive_prompt": "masterpiece, best quality",
+                "negative_prompt": "low quality, blurry",
+                "sampler": "euler_a",
+                "scheduler": "karras",
+                "cfg_scale": 7.5,
+                "denoise": 1.0,
+            },
+        )
+
+        assert request.params["positive_prompt"] == "masterpiece, best quality"
+        assert request.params["negative_prompt"] == "low quality, blurry"
+        assert request.params["cfg_scale"] == 7.5
+        assert request.params["denoise"] == 1.0

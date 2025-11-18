@@ -197,6 +197,48 @@ class GenerationResult(BaseModel):
     model_config = {"extra": "forbid"}
 
 
+class GenerationRequest(BaseModel):
+    """Represents a request to generate images using a workflow template.
+
+    This model encapsulates all the information needed to execute an image
+    generation request, including which template to use, what parameters to
+    pass to it, and how to handle the output.
+
+    Attributes:
+        template_id: Identifier of the workflow template to use
+        params: Dictionary of parameters to substitute in the template
+        output_settings: Configuration for output handling (directory, format, etc.)
+
+    Example:
+        >>> request = GenerationRequest(
+        ...     template_id="character-portrait",
+        ...     params={
+        ...         "prompt": "a warrior in armor",
+        ...         "seed": 42,
+        ...         "steps": 20
+        ...     },
+        ...     output_settings={
+        ...         "output_dir": "/game/assets/characters",
+        ...         "format": "png"
+        ...     }
+        ... )
+    """
+
+    template_id: str = Field(
+        ..., min_length=1, description="Workflow template identifier"
+    )
+    params: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Parameters to substitute in the template",
+    )
+    output_settings: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Output configuration (directory, format, filename, etc.)",
+    )
+
+    model_config = {"extra": "forbid"}
+
+
 class TemplateParameter(BaseModel):
     """Represents a parameter definition for a workflow template.
 
@@ -375,6 +417,7 @@ __all__ = [
     "WorkflowNode",
     "WorkflowPrompt",
     "GenerationResult",
+    "GenerationRequest",
     "TemplateParameter",
     "WorkflowTemplate",
 ]
