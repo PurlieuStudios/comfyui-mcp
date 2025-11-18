@@ -85,6 +85,32 @@ comfyui-mcp/
 - `websockets` for real-time workflow monitoring
 - `Pillow` for image handling (optional)
 
+## Development Workflow
+
+When implementing GitHub issues, follow this strict workflow:
+
+1. **Pick an issue**: Select the next issue to implement from the GitHub issue tracker
+2. **Plan the implementation**: Use TodoWrite to break down the task into actionable steps
+3. **Follow TDD (Test-Driven Development)**:
+   - **RED phase**: Write tests FIRST (they should fail)
+   - **GREEN phase**: Implement the minimum code to make tests pass
+   - **REFACTOR phase**: Clean up and optimize the code
+4. **Quality checks**:
+   - Run pytest with 80%+ coverage requirement
+   - Run mypy with strict type checking (0 errors)
+   - Run ruff linting and formatting (0 errors)
+5. **Index with RAG**: Index new/modified code with RAG MCP for searchability
+6. **Git workflow**:
+   - Create feature branch: `feature/issue-N-description`
+   - Commit changes with detailed message
+   - Push branch to remote
+   - Create pull request with comprehensive description
+   - Merge PR (squash merge preferred)
+7. **Close the issue**: After merge, close the GitHub issue with a comment summarizing what was done
+8. **Pull latest**: Switch back to master and pull latest changes
+
+**IMPORTANT**: Always close GitHub issues immediately after merging the PR. This keeps the issue tracker clean and accurate.
+
 ## Development Notes
 
 ### ComfyUI API Endpoints
