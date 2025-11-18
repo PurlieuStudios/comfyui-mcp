@@ -1,0 +1,101 @@
+{
+  "name": "Character Portrait Generator",
+  "description": "Generates character portraits for RPG games using Stable Diffusion 1.5. Produces 512x512 images suitable for character cards, dialogue boxes, and inventory screens.",
+  "category": "character",
+  "parameters": {
+    "prompt": {
+      "name": "prompt",
+      "description": "Character description (e.g., 'a warrior in armor', 'an elven mage with blue robes')",
+      "type": "string",
+      "default": "a warrior in armor",
+      "required": true
+    },
+    "negative_prompt": {
+      "name": "negative_prompt",
+      "description": "Things to avoid in the generation",
+      "type": "string",
+      "default": "blurry, low quality, distorted",
+      "required": false
+    },
+    "seed": {
+      "name": "seed",
+      "description": "Random seed for reproducibility (-1 for random)",
+      "type": "int",
+      "default": -1,
+      "required": false
+    },
+    "steps": {
+      "name": "steps",
+      "description": "Number of sampling steps (higher = better quality, slower)",
+      "type": "int",
+      "default": 20,
+      "required": false
+    },
+    "cfg_scale": {
+      "name": "cfg_scale",
+      "description": "How closely to follow the prompt (7.0 is balanced)",
+      "type": "float",
+      "default": 7.0,
+      "required": false
+    }
+  },
+  "nodes": {
+    "1": {
+      "class_type": "CheckpointLoaderSimple",
+      "inputs": {
+        "ckpt_name": "v1-5-pruned.safetensors"
+      }
+    },
+    "2": {
+      "class_type": "CLIPTextEncode",
+      "inputs": {
+        "text": "{{prompt}}, portrait, detailed face, professional quality",
+        "clip": ["1", 1]
+      }
+    },
+    "3": {
+      "class_type": "CLIPTextEncode",
+      "inputs": {
+        "text": "{{negative_prompt}}",
+        "clip": ["1", 1]
+      }
+    },
+    "4": {
+      "class_type": "EmptyLatentImage",
+      "inputs": {
+        "width": 512,
+        "height": 512,
+        "batch_size": 1
+      }
+    },
+    "5": {
+      "class_type": "KSampler",
+      "inputs": {
+        "seed": "{{seed}}",
+        "steps": "{{steps}}",
+        "cfg": "{{cfg_scale}}",
+        "sampler_name": "euler_ancestral",
+        "scheduler": "normal",
+        "denoise": 1.0,
+        "model": ["1", 0],
+        "positive": ["2", 0],
+        "negative": ["3", 0],
+        "latent_image": ["4", 0]
+      }
+    },
+    "6": {
+      "class_type": "VAEDecode",
+      "inputs": {
+        "samples": ["5", 0],
+        "vae": ["1", 2]
+      }
+    },
+    "7": {
+      "class_type": "SaveImage",
+      "inputs": {
+        "filename_prefix": "character_portrait",
+        "images": ["6", 0]
+      }
+    }
+  }
+}
