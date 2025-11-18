@@ -708,6 +708,9 @@ class WorkflowTemplate(BaseModel):
         Placeholders are in the format {{parameter_name}} and are replaced with
         values from the params dict or the parameter's default value.
 
+        Validates that all required parameters are provided and that parameter
+        types match their definitions.
+
         Args:
             params: Dictionary of parameter values to substitute. If a parameter
                    is not provided, its default value is used.
@@ -715,20 +718,75 @@ class WorkflowTemplate(BaseModel):
         Returns:
             WorkflowPrompt instance with all placeholders replaced with actual values
 
+        Raises:
+            ValidationError: If required parameters are missing, if parameter types
+                           don't match, or if required string parameters are empty.
+
         Example:
             >>> template = WorkflowTemplate(...)
             >>> workflow = template.instantiate({"prompt": "a warrior", "seed": 123})
         """
         import copy
 
-        # Start with default values
-        param_values: dict[str, Any] = {}
-        for param_name, param_def in self.parameters.items():
-            param_values[param_name] = param_def.default
+        from pydantic import ValidationError as PydanticValidationError
 
-        # Override with provided values
-        if params is not None:
-            param_values.update(params)
+        # Build parameter values (only use defaults for parameters not explicitly provided)
+        param_values: dict[str, Any] = {}
+        provided_params = params if params is not None else {}
+
+        # Build param_values: use provided values, otherwise use defaults
+        for param_name, param_def in self.parameters.items():
+            if param_name in provided_params:
+                param_values[param_name] = provided_params[param_name]
+            else:
+                param_values[param_name] = param_def.default
+
+        # Validate required parameters after applying defaults
+        # A required parameter is satisfied if it has a non-None value (from either source)
+        missing_required: list[str] = []
+
+        for param_name, param_def in self.parameters.items():
+            if param_def.required:
+                value = param_values[param_name]
+                # Required parameter must have a non-None value
+                if value is None:
+                    missing_required.append(param_name)
+
+        # Raise ValidationError for missing required parameters
+        if missing_required:
+            errors: list[Any] = []
+            for param_name in missing_required:
+                errors.append(
+                    {
+                        "type": "missing",
+                        "loc": ("parameters", param_name),
+                        "msg": f"Required parameter '{param_name}' is missing or None",
+                        "input": params,
+                    }
+                )
+            raise PydanticValidationError.from_exception_data(
+                "WorkflowTemplate.instantiate", errors
+            )
+
+        # Check for empty required string parameters (raise ValueError for consistency)
+        for param_name, param_def in self.parameters.items():
+            if param_def.required and param_def.type == "string":
+                value = param_values[param_name]
+                if value == "":
+                    msg = f"Required parameter '{param_name}' cannot be empty"
+                    raise ValueError(msg)
+
+        # Validate and coerce parameter types
+        validated_params: dict[str, Any] = {}
+        for param_name, value in param_values.items():
+            if param_name in self.parameters:
+                param_def = self.parameters[param_name]
+                validated_params[param_name] = self._validate_and_coerce_type(
+                    param_name, value, param_def.type
+                )
+            else:
+                # Keep unknown parameters as-is
+                validated_params[param_name] = value
 
         # Deep copy nodes to avoid modifying the template
         instantiated_nodes: dict[str, WorkflowNode] = {}
@@ -738,7 +796,7 @@ class WorkflowTemplate(BaseModel):
             node_inputs = copy.deepcopy(node.inputs)
 
             # Substitute parameters in inputs
-            node_inputs = self._substitute_parameters(node_inputs, param_values)
+            node_inputs = self._substitute_parameters(node_inputs, validated_params)
 
             # Create new node with substituted inputs
             instantiated_nodes[node_id] = WorkflowNode(
@@ -791,6 +849,93 @@ class WorkflowTemplate(BaseModel):
         else:
             # Return primitives as-is
             return obj
+
+    def _validate_and_coerce_type(
+        self, param_name: str, value: Any, expected_type: str
+    ) -> Any:
+        """Validate and coerce parameter value to expected type.
+
+        Args:
+            param_name: Name of the parameter (for error messages)
+            value: Value to validate and coerce
+            expected_type: Expected type ("string", "int", or "float")
+
+        Returns:
+            Value coerced to the expected type
+
+        Raises:
+            ValueError: If value cannot be coerced to expected type
+        """
+        # Handle None values - they should have been caught by required validation
+        if value is None:
+            return None
+
+        # String type - convert everything to string
+        if expected_type == "string":
+            if isinstance(value, (list, dict)):
+                msg = f"Parameter '{param_name}' expected type 'string', got {type(value).__name__}"
+                raise ValueError(msg)
+            # Check for empty strings if this is a required string parameter
+            str_value = str(value)
+            return str_value
+
+        # Int type - convert to int if possible
+        elif expected_type == "int":
+            if isinstance(value, (list, dict)):
+                msg = f"Parameter '{param_name}' expected type 'int', got {type(value).__name__}"
+                raise ValueError(msg)
+
+            if isinstance(value, bool):
+                # Booleans are technically int subclass in Python, but reject them
+                msg = f"Parameter '{param_name}' expected type 'int', got bool"
+                raise ValueError(msg)
+
+            if isinstance(value, int):
+                return value
+
+            if isinstance(value, float):
+                # Allow float->int if it's a whole number
+                if value.is_integer():
+                    return int(value)
+                msg = f"Parameter '{param_name}' expected type 'int', got float with decimal value"
+                raise ValueError(msg)
+
+            if isinstance(value, str):
+                try:
+                    return int(value)
+                except ValueError as e:
+                    msg = f"Parameter '{param_name}' expected type 'int', cannot convert '{value}' to int"
+                    raise ValueError(msg) from e
+
+            msg = f"Parameter '{param_name}' expected type 'int', got {type(value).__name__}"
+            raise ValueError(msg)
+
+        # Float type - convert to float if possible
+        elif expected_type == "float":
+            if isinstance(value, (list, dict)):
+                msg = f"Parameter '{param_name}' expected type 'float', got {type(value).__name__}"
+                raise ValueError(msg)
+
+            if isinstance(value, bool):
+                msg = f"Parameter '{param_name}' expected type 'float', got bool"
+                raise ValueError(msg)
+
+            if isinstance(value, (int, float)):
+                return float(value)
+
+            if isinstance(value, str):
+                try:
+                    return float(value)
+                except ValueError as e:
+                    msg = f"Parameter '{param_name}' expected type 'float', cannot convert '{value}' to float"
+                    raise ValueError(msg) from e
+
+            msg = f"Parameter '{param_name}' expected type 'float', got {type(value).__name__}"
+            raise ValueError(msg)
+
+        else:
+            # Unknown type - return as-is
+            return value
 
     def to_file(self, file_path: Path | str) -> None:
         """Save workflow template to JSON file.
