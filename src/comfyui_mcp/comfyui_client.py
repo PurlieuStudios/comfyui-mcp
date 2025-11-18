@@ -6,6 +6,7 @@ managing aiohttp sessions, connection pooling, and providing proper resource cle
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 import aiohttp
@@ -71,6 +72,15 @@ class ComfyUIClient:
         self.config = config
         self._session: aiohttp.ClientSession | None = None
 
+        # Initialize logger
+        self.logger = logging.getLogger(__name__)
+
+        # Log initialization with context (mask API key if present)
+        api_key_info = "with API key" if config.api_key else "without API key"
+        self.logger.debug(
+            f"ComfyUIClient initialized for {config.url} (timeout={config.timeout}s, {api_key_info})"
+        )
+
     @property
     def session(self) -> aiohttp.ClientSession:
         """Get or create the aiohttp ClientSession.
@@ -89,6 +99,8 @@ class ComfyUIClient:
             >>> assert session is session2
         """
         if self._session is None:
+            self.logger.debug("Creating aiohttp session")
+
             # Create timeout configuration
             timeout = aiohttp.ClientTimeout(total=self.config.timeout)
 
@@ -116,6 +128,7 @@ class ComfyUIClient:
             >>> await client.close()  # Safe to call again
         """
         if self._session is not None and not self._session.closed:
+            self.logger.debug("Closing aiohttp session")
             await self._session.close()
 
     @retry_with_backoff()
@@ -142,17 +155,28 @@ class ComfyUIClient:
         try:
             base_url = self.config.url.rstrip("/")
             url = f"{base_url}/queue"
+            self.logger.info(f"Validating connection to {url}")
             async with self.session.get(url) as response:
                 # Consider 2xx status codes as successful connection
                 status: int = response.status
-                return 200 <= status < 300
+                success = 200 <= status < 300
+                if success:
+                    self.logger.info(
+                        f"Connection validated successfully (status={status})"
+                    )
+                else:
+                    self.logger.warning(
+                        f"Connection validation failed (status={status})"
+                    )
+                return success
         except (
             aiohttp.ClientConnectorError,
             aiohttp.ClientError,
             TimeoutError,
             Exception,
-        ):
+        ) as e:
             # Any connection error means server is not reachable
+            self.logger.error(f"Connection validation failed: {type(e).__name__}: {e}")
             return False
 
     async def health_check(self, endpoint: str = "/queue") -> dict[str, Any]:
