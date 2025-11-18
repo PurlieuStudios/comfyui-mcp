@@ -1,0 +1,125 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+.virtualenv/
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+coverage.json
+*.cover
+*.log
+.pytest_cache/
+.hypothesis/
+
+# Test artifacts
+test_*.md
+generated_*.md
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# poetry
+poetry.lock
+
+# PEP 582
+__pypackages__/
+
+# Environments
+.env
+.env.local
+.env.*.local
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# MCP Server specific
+.mcp.json
+.mcp-config.json
+*.mcp.log
+
+# Claude Code
+.claude/settings.local.json
+
+# Configuration files (may contain tokens)
+comfyui-mcp.toml
+config.toml
+!comfyui-mcp.example.toml
+
+# OS
+Thumbs.db
+.Trash-*
+
+# Testing
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pytype/
+
+# Documentation
+docs/_build/
+site/
+
+# Distribution
+*.tar.gz
+*.whl
+
+# ComfyUI specific
+output/
+temp/
+*.png
+*.jpg
+*.jpeg
+*.webp
+!examples/**/*.png
+!examples/**/*.jpg
+!docs/**/*.png
