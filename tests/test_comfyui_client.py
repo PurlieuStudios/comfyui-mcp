@@ -1326,3 +1326,212 @@ class TestComfyUIClientImageDownload:
 
         # Clean up
         await client.close()
+
+
+class TestComfyUIClientWorkflowCancellation:
+    """Test ComfyUI client workflow cancellation functionality."""
+
+    @pytest.mark.asyncio
+    async def test_cancel_workflow_by_prompt_id(self, aiohttp_server):
+        """Test canceling a specific workflow by prompt_id."""
+        from aiohttp import web
+
+        received_payload = {}
+
+        async def queue_handler(request):
+            nonlocal received_payload
+            if request.method == "POST":
+                received_payload = await request.json()
+                return web.json_response({"status": "success"})
+            return web.json_response({"queue_running": [], "queue_pending": []})
+
+        app = web.Application()
+        app.router.add_post("/queue", queue_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        client = ComfyUIClient(config)
+
+        # Cancel workflow
+        result = await client.cancel_workflow(prompt_id="test-prompt-123")
+
+        # Verify the correct payload was sent
+        assert received_payload == {"delete": ["test-prompt-123"]}
+        assert result is True
+
+        # Clean up
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_cancel_workflow_interrupt_running(self, aiohttp_server):
+        """Test interrupting the currently running workflow."""
+        from aiohttp import web
+
+        interrupt_called = False
+
+        async def interrupt_handler(request):
+            nonlocal interrupt_called
+            interrupt_called = True
+            return web.json_response({"status": "interrupted"})
+
+        app = web.Application()
+        app.router.add_post("/interrupt", interrupt_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        client = ComfyUIClient(config)
+
+        # Interrupt running workflow
+        result = await client.cancel_workflow(interrupt_running=True)
+
+        assert interrupt_called is True
+        assert result is True
+
+        # Clean up
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_cancel_workflow_both_prompt_and_interrupt(self, aiohttp_server):
+        """Test canceling specific prompt and interrupting running workflow."""
+        from aiohttp import web
+
+        received_payload = {}
+        interrupt_called = False
+
+        async def queue_handler(request):
+            nonlocal received_payload
+            received_payload = await request.json()
+            return web.json_response({"status": "success"})
+
+        async def interrupt_handler(request):
+            nonlocal interrupt_called
+            interrupt_called = True
+            return web.json_response({"status": "interrupted"})
+
+        app = web.Application()
+        app.router.add_post("/queue", queue_handler)
+        app.router.add_post("/interrupt", interrupt_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        client = ComfyUIClient(config)
+
+        # Cancel specific workflow AND interrupt running
+        result = await client.cancel_workflow(
+            prompt_id="test-prompt-456", interrupt_running=True
+        )
+
+        # Both operations should have been called
+        assert received_payload == {"delete": ["test-prompt-456"]}
+        assert interrupt_called is True
+        assert result is True
+
+        # Clean up
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_cancel_workflow_no_parameters(self):
+        """Test that cancel_workflow raises error when no parameters provided."""
+        config = ComfyUIConfig(url="http://127.0.0.1:8188")
+        client = ComfyUIClient(config)
+
+        # Should raise ValueError when neither parameter is provided
+        with pytest.raises(ValueError, match="Must provide either prompt_id"):
+            await client.cancel_workflow()
+
+        # Clean up
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_cancel_workflow_connection_error(self):
+        """Test cancel_workflow handles connection errors."""
+        config = ComfyUIConfig(url="http://127.0.0.1:9999")
+        client = ComfyUIClient(config)
+
+        # Should raise exception on connection error
+        with pytest.raises(ClientConnectorError):
+            await client.cancel_workflow(prompt_id="test-prompt-789")
+
+        # Clean up
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_cancel_workflow_server_error(self, aiohttp_server):
+        """Test cancel_workflow handles server errors."""
+        from aiohttp import web
+
+        async def queue_handler(request):
+            return web.Response(status=500, text="Internal Server Error")
+
+        app = web.Application()
+        app.router.add_post("/queue", queue_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        client = ComfyUIClient(config)
+
+        # Should raise exception on server error
+        with pytest.raises(ClientResponseError):
+            await client.cancel_workflow(prompt_id="test-prompt-error")
+
+        # Clean up
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_interrupt_workflow_server_error(self, aiohttp_server):
+        """Test interrupt_running handles server errors."""
+        from aiohttp import web
+
+        async def interrupt_handler(request):
+            return web.Response(status=500, text="Internal Server Error")
+
+        app = web.Application()
+        app.router.add_post("/interrupt", interrupt_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        client = ComfyUIClient(config)
+
+        # Should raise exception on server error
+        with pytest.raises(ClientResponseError):
+            await client.cancel_workflow(interrupt_running=True)
+
+        # Clean up
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_cancel_workflow_multiple_prompts(self, aiohttp_server):
+        """Test canceling multiple workflows at once."""
+        from aiohttp import web
+
+        received_payload = {}
+
+        async def queue_handler(request):
+            nonlocal received_payload
+            received_payload = await request.json()
+            return web.json_response({"status": "success"})
+
+        app = web.Application()
+        app.router.add_post("/queue", queue_handler)
+
+        # Start server
+        server = await aiohttp_server(app)
+        config = ComfyUIConfig(url=str(server.make_url("/")))
+        client = ComfyUIClient(config)
+
+        # Cancel multiple workflows (using list)
+        result = await client.cancel_workflow(
+            prompt_id=["prompt-1", "prompt-2", "prompt-3"]
+        )
+
+        # Verify all prompt IDs were sent
+        assert received_payload == {"delete": ["prompt-1", "prompt-2", "prompt-3"]}
+        assert result is True
+
+        # Clean up
+        await client.close()

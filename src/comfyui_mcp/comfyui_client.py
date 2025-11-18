@@ -483,6 +483,88 @@ class ComfyUIClient:
             image_bytes: bytes = await response.read()
             return image_bytes
 
+    async def cancel_workflow(
+        self,
+        prompt_id: str | list[str] | None = None,
+        interrupt_running: bool = False,
+    ) -> bool:
+        """Cancel one or more workflows in the queue.
+
+        This method provides two cancellation mechanisms:
+        1. Delete specific pending workflows by prompt_id (POST /queue)
+        2. Interrupt the currently running workflow (POST /interrupt)
+
+        Args:
+            prompt_id: Prompt ID(s) to cancel from the queue. Can be:
+                      - A single prompt ID string (e.g., "prompt-123")
+                      - A list of prompt IDs (e.g., ["prompt-1", "prompt-2"])
+                      - None (if only interrupting running workflow)
+            interrupt_running: If True, interrupt the currently running workflow
+                             by sending POST to /interrupt endpoint
+
+        Returns:
+            True if the cancellation request(s) were successful
+
+        Raises:
+            ValueError: If neither prompt_id nor interrupt_running is provided
+            aiohttp.ClientError: If there's an HTTP error
+            aiohttp.ClientConnectorError: If cannot connect to server
+            aiohttp.ClientResponseError: If server returns error status
+
+        Example:
+            >>> config = ComfyUIConfig(url="http://127.0.0.1:8188")
+            >>> client = ComfyUIClient(config)
+            >>> # Cancel a specific pending workflow
+            >>> await client.cancel_workflow(prompt_id="prompt-123")
+            True
+
+            >>> # Interrupt the currently running workflow
+            >>> await client.cancel_workflow(interrupt_running=True)
+            True
+
+            >>> # Cancel multiple pending workflows at once
+            >>> await client.cancel_workflow(
+            ...     prompt_id=["prompt-1", "prompt-2", "prompt-3"]
+            ... )
+            True
+
+            >>> # Cancel specific workflow AND interrupt running one
+            >>> await client.cancel_workflow(
+            ...     prompt_id="prompt-456",
+            ...     interrupt_running=True
+            ... )
+            True
+        """
+        # Validate that at least one parameter is provided
+        if prompt_id is None and not interrupt_running:
+            raise ValueError("Must provide either prompt_id or interrupt_running=True")
+
+        base_url = self.config.url.rstrip("/")
+
+        # Delete specific workflow(s) from queue if prompt_id provided
+        if prompt_id is not None:
+            # Convert single prompt_id to list for consistent handling
+            prompt_ids: list[str] = (
+                [prompt_id] if isinstance(prompt_id, str) else prompt_id
+            )
+
+            # POST to /queue endpoint with delete payload
+            queue_url = f"{base_url}/queue"
+            payload = {"delete": prompt_ids}
+
+            async with self.session.post(queue_url, json=payload) as response:
+                response.raise_for_status()
+
+        # Interrupt currently running workflow if requested
+        if interrupt_running:
+            # POST to /interrupt endpoint
+            interrupt_url = f"{base_url}/interrupt"
+
+            async with self.session.post(interrupt_url) as response:
+                response.raise_for_status()
+
+        return True
+
     async def __aenter__(self) -> ComfyUIClient:
         """Enter the async context manager.
 
