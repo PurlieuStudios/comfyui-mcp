@@ -185,6 +185,22 @@ Add to your `.mcp.json`:
 }
 ```
 
+**More Configuration Examples:**
+
+Complete `.mcp.json` configuration examples are available in [`examples/mcp/`](examples/mcp/):
+
+| Example | Description | Use Case |
+|---------|-------------|----------|
+| [`basic.mcp.json`](examples/mcp/basic.mcp.json) | Minimal configuration | Quick start, local development |
+| [`development.mcp.json`](examples/mcp/development.mcp.json) | Development setup | Game project development |
+| [`production.mcp.json`](examples/mcp/production.mcp.json) | Production deployment | Remote servers, teams |
+| [`custom-templates.mcp.json`](examples/mcp/custom-templates.mcp.json) | Custom workflow templates | Game-specific workflows |
+| [`multi-server.mcp.json`](examples/mcp/multi-server.mcp.json) | Multiple MCP instances | Large projects, asset categories |
+| [`docker.mcp.json`](examples/mcp/docker.mcp.json) | Docker/container setup | Containerized deployment |
+| [`windows.mcp.json`](examples/mcp/windows.mcp.json) | Windows environment | Windows development |
+
+See [`examples/mcp/README.md`](examples/mcp/README.md) for detailed documentation of each configuration.
+
 **2. Use via Claude Code or MCP Client**
 
 ```python

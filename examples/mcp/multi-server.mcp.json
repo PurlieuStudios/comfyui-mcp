@@ -1,0 +1,44 @@
+{
+  "mcpServers": {
+    "comfyui-character-gen": {
+      "command": "python",
+      "args": [
+        "-m",
+        "comfyui_mcp.server",
+        "--template-dir",
+        "./workflows/characters"
+      ],
+      "env": {
+        "COMFYUI_URL": "http://localhost:8188",
+        "COMFYUI_OUTPUT_DIR": "./generated/characters"
+      }
+    },
+    "comfyui-environment-gen": {
+      "command": "python",
+      "args": [
+        "-m",
+        "comfyui_mcp.server",
+        "--template-dir",
+        "./workflows/environments"
+      ],
+      "env": {
+        "COMFYUI_URL": "http://localhost:8189",
+        "COMFYUI_OUTPUT_DIR": "./generated/environments",
+        "COMFYUI_TIMEOUT": "180.0"
+      }
+    },
+    "comfyui-item-gen": {
+      "command": "python",
+      "args": [
+        "-m",
+        "comfyui_mcp.server",
+        "--template-dir",
+        "./workflows/items"
+      ],
+      "env": {
+        "COMFYUI_URL": "http://localhost:8188",
+        "COMFYUI_OUTPUT_DIR": "./generated/items"
+      }
+    }
+  }
+}

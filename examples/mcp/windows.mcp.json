@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "comfyui-mcp": {
+      "command": "python",
+      "args": ["-m", "comfyui_mcp.server"],
+      "env": {
+        "COMFYUI_URL": "http://127.0.0.1:8188",
+        "COMFYUI_OUTPUT_DIR": "C:\\Users\\YourName\\Documents\\ComfyUI\\output",
+        "COMFYUI_TIMEOUT": "120.0"
+      },
+      "cwd": "C:\\Users\\YourName\\Projects\\my-game"
+    }
+  }
+}

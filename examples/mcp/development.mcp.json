@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "comfyui-mcp": {
+      "command": "python",
+      "args": ["-m", "comfyui_mcp.server"],
+      "env": {
+        "COMFYUI_URL": "http://localhost:8188",
+        "COMFYUI_OUTPUT_DIR": "./generated_images",
+        "COMFYUI_TIMEOUT": "120.0"
+      },
+      "cwd": "/path/to/your/project"
+    }
+  }
+}

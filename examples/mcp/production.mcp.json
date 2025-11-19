@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "comfyui-mcp": {
+      "command": "python",
+      "args": [
+        "-m",
+        "comfyui_mcp.server",
+        "--comfyui-url",
+        "http://comfyui.production.example.com:8188"
+      ],
+      "env": {
+        "COMFYUI_URL": "http://comfyui.production.example.com:8188",
+        "COMFYUI_API_KEY": "your-production-api-key-min-8-chars",
+        "COMFYUI_TIMEOUT": "300.0",
+        "COMFYUI_OUTPUT_DIR": "/var/comfyui/output"
+      },
+      "cwd": "/opt/comfyui-mcp"
+    }
+  }
+}
