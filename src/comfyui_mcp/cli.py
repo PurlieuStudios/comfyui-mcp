@@ -31,6 +31,7 @@ import click
 from comfyui_mcp import __version__
 from comfyui_mcp.comfyui_client import ComfyUIClient
 from comfyui_mcp.config import load_config
+from comfyui_mcp.image_generator import ImageGenerator
 from comfyui_mcp.models import ComfyUIConfig
 from comfyui_mcp.template_manager import WorkflowTemplateManager
 
@@ -223,6 +224,171 @@ def test_connection(ctx: click.Context) -> None:
 
             click.echo(traceback.format_exc(), err=True)
         sys.exit(1)
+
+
+@cli.command("generate")
+@click.argument("template_id", type=str)
+@click.option(
+    "--param",
+    "-p",
+    multiple=True,
+    help="Template parameter as key=value (can be specified multiple times)",
+)
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    help="Output directory for generated images",
+)
+@click.pass_context
+def generate(
+    ctx: click.Context,
+    template_id: str,
+    param: tuple[str, ...],
+    output: Path | None,
+) -> None:
+    """Generate images using a workflow template.
+
+    This command generates images by instantiating a workflow template with
+    the provided parameters and submitting it to ComfyUI for execution.
+
+    The TEMPLATE_ID argument specifies which template to use (filename without
+    the .json extension).
+
+    Parameters can be provided using the --param option with key=value pairs.
+    Parameters can be specified multiple times for different values.
+
+    Examples:
+        # Generate with default parameters
+        comfyui generate character-portrait
+
+        # Generate with custom parameters
+        comfyui generate character-portrait --param prompt="a wizard" --param seed=42
+
+        # Generate with custom output directory
+        comfyui generate item-icon --param item="sword" --output ./generated
+
+        # Use verbose mode for detailed information
+        comfyui --verbose generate environment-texture --param style="fantasy"
+    """
+    config: ComfyUIConfig = ctx.obj["config"]
+    verbose: bool = ctx.obj.get("verbose", False)
+    template_dir: Path | None = ctx.obj.get("template_dir")
+
+    # Use default template directory if not specified
+    if template_dir is None:
+        template_dir = Path("workflows")
+
+    # Parse parameters from key=value format
+    parameters: dict[str, Any] = {}
+    for param_str in param:
+        if "=" not in param_str:
+            click.echo(
+                click.style(
+                    f"Error: Invalid parameter format '{param_str}'. "
+                    "Expected key=value format.",
+                    fg="red",
+                ),
+                err=True,
+            )
+            sys.exit(1)
+
+        key, value = param_str.split("=", 1)
+        # Try to parse as number if possible
+        try:
+            # Try int first
+            parameters[key] = int(value)
+        except ValueError:
+            try:
+                # Try float
+                parameters[key] = float(value)
+            except ValueError:
+                # Keep as string
+                parameters[key] = value
+
+    if verbose:
+        click.echo(f"Template: {template_id}")
+        click.echo(f"Template directory: {template_dir}")
+        if parameters:
+            click.echo(f"Parameters: {parameters}")
+        if output:
+            click.echo(f"Output directory: {output}")
+
+    async def _generate() -> None:
+        """Inner async function to perform image generation."""
+        try:
+            # Initialize template manager
+            if not template_dir.exists():
+                click.echo(
+                    click.style(
+                        f"Error: Template directory not found: {template_dir}",
+                        fg="red",
+                    ),
+                    err=True,
+                )
+                sys.exit(1)
+
+            manager = WorkflowTemplateManager(template_dir)
+
+            # Create client and generator
+            async with ComfyUIClient(config) as client:
+                generator = ImageGenerator(client=client, template_manager=manager)
+
+                # Show generation status
+                click.echo(f"Generating images from template '{template_id}'...")
+
+                # Generate images
+                result = await generator.generate_from_template(
+                    template_id=template_id,
+                    parameters=parameters if parameters else None,
+                )
+
+                # Show success
+                click.echo(
+                    click.style("✓ Generation completed successfully!", fg="green")
+                )
+                click.echo(f"\nPrompt ID: {result.prompt_id}")
+                click.echo(f"Execution time: {result.execution_time:.2f}s")
+                click.echo(f"Generated {len(result.images)} image(s):")
+
+                for image in result.images:
+                    click.echo(f"  • {image}")
+
+                # Show metadata in verbose mode
+                if verbose and result.metadata:
+                    click.echo("\nMetadata:")
+                    for key, value in result.metadata.items():
+                        click.echo(f"  {key}: {value}")
+
+                # Show output directory information
+                if output:
+                    click.echo(f"\nOutput directory: {output}")
+                elif config.output_dir:
+                    click.echo(f"\nOutput directory: {config.output_dir}")
+
+        except FileNotFoundError as e:
+            click.echo(
+                click.style(f"✗ Error: {e}", fg="red"),
+                err=True,
+            )
+            if verbose:
+                import traceback
+
+                click.echo(traceback.format_exc(), err=True)
+            sys.exit(1)
+        except Exception as e:
+            click.echo(
+                click.style(f"✗ Error generating images: {e}", fg="red"),
+                err=True,
+            )
+            if verbose:
+                import traceback
+
+                click.echo(traceback.format_exc(), err=True)
+            sys.exit(1)
+
+    # Run the async generation
+    asyncio.run(_generate())
 
 
 @cli.command("list-templates")

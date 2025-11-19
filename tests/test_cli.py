@@ -414,6 +414,306 @@ class TestTestConnectionCommand:
         assert result.exit_code == 1
 
 
+class TestGenerateCommand:
+    """Tests for generate CLI command."""
+
+    def test_generate_command_exists(self) -> None:
+        """Test that generate command is registered."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ["generate", "--help"])
+
+        # Command should exist and show help
+        assert result.exit_code == 0
+        assert "generate" in result.output.lower()
+
+    @patch("comfyui_mcp.cli.ImageGenerator")
+    @patch("comfyui_mcp.cli.ComfyUIClient")
+    def test_generate_with_template_id(
+        self,
+        mock_client_class: MagicMock,
+        mock_generator_class: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Test generate command with template ID."""
+        # Create test template
+        template_data = {
+            "name": "Test Template",
+            "description": "Test",
+            "parameters": {},
+            "nodes": {},
+        }
+        (tmp_path / "test-template.json").write_text(json.dumps(template_data))
+
+        # Setup mocks
+        mock_client = MagicMock()
+        mock_client_class.return_value.__aenter__.return_value = mock_client
+
+        mock_generator = MagicMock()
+        mock_generator_class.return_value = mock_generator
+        mock_generator.generate_from_template = AsyncMock(
+            return_value=MagicMock(
+                prompt_id="test-123",
+                images=["output.png"],
+                execution_time=1.5,
+            )
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "--template-dir",
+                str(tmp_path),
+                "generate",
+                "test-template",
+            ],
+        )
+
+        # Should succeed
+        assert result.exit_code == 0
+        assert "test-123" in result.output or "output.png" in result.output
+
+    @patch("comfyui_mcp.cli.ImageGenerator")
+    @patch("comfyui_mcp.cli.ComfyUIClient")
+    def test_generate_with_parameters(
+        self,
+        mock_client_class: MagicMock,
+        mock_generator_class: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Test generate command with template parameters."""
+        # Create test template
+        template_data = {
+            "name": "Test Template",
+            "description": "Test",
+            "parameters": {
+                "prompt": {
+                    "type": "string",
+                    "description": "Text prompt",
+                    "default": "test",
+                }
+            },
+            "nodes": {},
+        }
+        (tmp_path / "test-template.json").write_text(json.dumps(template_data))
+
+        # Setup mocks
+        mock_client = MagicMock()
+        mock_client_class.return_value.__aenter__.return_value = mock_client
+
+        mock_generator = MagicMock()
+        mock_generator_class.return_value = mock_generator
+        mock_generator.generate_from_template = AsyncMock(
+            return_value=MagicMock(
+                prompt_id="test-123",
+                images=["output.png"],
+                execution_time=1.5,
+            )
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "--template-dir",
+                str(tmp_path),
+                "generate",
+                "test-template",
+                "--param",
+                "prompt=a wizard",
+                "--param",
+                "seed=42",
+            ],
+        )
+
+        # Should succeed and pass parameters
+        assert result.exit_code == 0
+
+    @patch("comfyui_mcp.cli.ImageGenerator")
+    @patch("comfyui_mcp.cli.ComfyUIClient")
+    def test_generate_with_output_dir(
+        self,
+        mock_client_class: MagicMock,
+        mock_generator_class: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Test generate command with custom output directory."""
+        # Create test template
+        template_data = {
+            "name": "Test Template",
+            "description": "Test",
+            "parameters": {},
+            "nodes": {},
+        }
+        (tmp_path / "test-template.json").write_text(json.dumps(template_data))
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+
+        # Setup mocks
+        mock_client = MagicMock()
+        mock_client_class.return_value.__aenter__.return_value = mock_client
+
+        mock_generator = MagicMock()
+        mock_generator_class.return_value = mock_generator
+        mock_generator.generate_from_template = AsyncMock(
+            return_value=MagicMock(
+                prompt_id="test-123",
+                images=["output.png"],
+                execution_time=1.5,
+            )
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "--template-dir",
+                str(tmp_path),
+                "generate",
+                "test-template",
+                "--output",
+                str(output_dir),
+            ],
+        )
+
+        # Should succeed
+        assert result.exit_code == 0
+
+    @patch("comfyui_mcp.cli.ImageGenerator")
+    @patch("comfyui_mcp.cli.ComfyUIClient")
+    def test_generate_missing_template(
+        self,
+        mock_client_class: MagicMock,
+        mock_generator_class: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Test generate command with missing template."""
+        # Setup mocks
+        mock_client = MagicMock()
+        mock_client_class.return_value.__aenter__.return_value = mock_client
+
+        mock_generator = MagicMock()
+        mock_generator_class.return_value = mock_generator
+        mock_generator.generate_from_template = AsyncMock(
+            side_effect=FileNotFoundError("Template not found: nonexistent")
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "--template-dir",
+                str(tmp_path),
+                "generate",
+                "nonexistent",
+            ],
+        )
+
+        # Should show error
+        assert result.exit_code == 1
+        assert "error" in result.output.lower() or "not found" in result.output.lower()
+
+    @patch("comfyui_mcp.cli.ImageGenerator")
+    @patch("comfyui_mcp.cli.ComfyUIClient")
+    def test_generate_shows_progress(
+        self,
+        mock_client_class: MagicMock,
+        mock_generator_class: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Test generate command shows generation progress."""
+        # Create test template
+        template_data = {
+            "name": "Test Template",
+            "description": "Test",
+            "parameters": {},
+            "nodes": {},
+        }
+        (tmp_path / "test-template.json").write_text(json.dumps(template_data))
+
+        # Setup mocks
+        mock_client = MagicMock()
+        mock_client_class.return_value.__aenter__.return_value = mock_client
+
+        mock_generator = MagicMock()
+        mock_generator_class.return_value = mock_generator
+        mock_generator.generate_from_template = AsyncMock(
+            return_value=MagicMock(
+                prompt_id="test-123",
+                images=["output.png"],
+                execution_time=1.5,
+            )
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "--template-dir",
+                str(tmp_path),
+                "generate",
+                "test-template",
+            ],
+        )
+
+        # Should show some progress/status information
+        assert result.exit_code == 0
+        # Output should contain status messages
+        output_lower = result.output.lower()
+        assert any(
+            word in output_lower
+            for word in ["generating", "completed", "success", "generated"]
+        )
+
+    @patch("comfyui_mcp.cli.ImageGenerator")
+    @patch("comfyui_mcp.cli.ComfyUIClient")
+    def test_generate_with_verbose_output(
+        self,
+        mock_client_class: MagicMock,
+        mock_generator_class: MagicMock,
+        tmp_path: Path,
+    ) -> None:
+        """Test generate command with --verbose flag."""
+        # Create test template
+        template_data = {
+            "name": "Test Template",
+            "description": "Test",
+            "parameters": {},
+            "nodes": {},
+        }
+        (tmp_path / "test-template.json").write_text(json.dumps(template_data))
+
+        # Setup mocks
+        mock_client = MagicMock()
+        mock_client_class.return_value.__aenter__.return_value = mock_client
+
+        mock_generator = MagicMock()
+        mock_generator_class.return_value = mock_generator
+        mock_generator.generate_from_template = AsyncMock(
+            return_value=MagicMock(
+                prompt_id="test-123",
+                images=["output.png"],
+                execution_time=1.5,
+                metadata={"seed": 42},
+            )
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "--template-dir",
+                str(tmp_path),
+                "--verbose",
+                "generate",
+                "test-template",
+            ],
+        )
+
+        # Should show detailed output
+        assert result.exit_code == 0
+
+
 class TestListTemplatesCommand:
     """Tests for list-templates CLI command."""
 
