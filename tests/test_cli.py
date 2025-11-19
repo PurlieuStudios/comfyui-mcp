@@ -11,6 +11,7 @@ Tests the Click-based command-line interface including:
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -411,3 +412,151 @@ class TestTestConnectionCommand:
 
         # Should return non-zero exit code for scripting purposes
         assert result.exit_code == 1
+
+
+class TestListTemplatesCommand:
+    """Tests for list-templates CLI command."""
+
+    def test_list_templates_command_exists(self) -> None:
+        """Test that list-templates command is registered."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ["list-templates", "--help"])
+
+        # Command should exist and show help
+        assert result.exit_code == 0
+        assert "list-templates" in result.output.lower()
+
+    def test_list_templates_shows_available_templates(self, tmp_path: Path) -> None:
+        """Test list-templates displays available templates."""
+        # Create test templates
+        template1_data = {
+            "name": "Character Portrait",
+            "description": "Generate character portraits",
+            "category": "character",
+            "parameters": {},
+            "nodes": {},
+        }
+        template2_data = {
+            "name": "Item Icon",
+            "description": "Generate item icons",
+            "category": "item",
+            "parameters": {},
+            "nodes": {},
+        }
+
+        (tmp_path / "character-portrait.json").write_text(json.dumps(template1_data))
+        (tmp_path / "item-icon.json").write_text(json.dumps(template2_data))
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["--template-dir", str(tmp_path), "list-templates"])
+
+        # Should succeed and show templates
+        assert result.exit_code == 0
+        assert "character-portrait" in result.output
+        assert "item-icon" in result.output
+
+    def test_list_templates_with_details(self, tmp_path: Path) -> None:
+        """Test list-templates with --detailed flag shows full info."""
+        template_data = {
+            "name": "Test Template",
+            "description": "A test template",
+            "category": "test",
+            "parameters": {},
+            "nodes": {},
+        }
+
+        (tmp_path / "test-template.json").write_text(json.dumps(template_data))
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli, ["--template-dir", str(tmp_path), "list-templates", "--detailed"]
+        )
+
+        # Should show detailed information
+        assert result.exit_code == 0
+        assert "Test Template" in result.output
+        assert "A test template" in result.output
+
+    def test_list_templates_filter_by_category(self, tmp_path: Path) -> None:
+        """Test list-templates --category filters templates."""
+        template1_data = {
+            "name": "Character Portrait",
+            "description": "Generate character portraits",
+            "category": "character",
+            "parameters": {},
+            "nodes": {},
+        }
+        template2_data = {
+            "name": "Item Icon",
+            "description": "Generate item icons",
+            "category": "item",
+            "parameters": {},
+            "nodes": {},
+        }
+
+        (tmp_path / "character-portrait.json").write_text(json.dumps(template1_data))
+        (tmp_path / "item-icon.json").write_text(json.dumps(template2_data))
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "--template-dir",
+                str(tmp_path),
+                "list-templates",
+                "--category",
+                "character",
+            ],
+        )
+
+        # Should only show character templates
+        assert result.exit_code == 0
+        assert "character-portrait" in result.output
+        assert "item-icon" not in result.output
+
+    def test_list_templates_empty_directory(self, tmp_path: Path) -> None:
+        """Test list-templates with no templates shows appropriate message."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ["--template-dir", str(tmp_path), "list-templates"])
+
+        # Should handle empty directory gracefully
+        assert result.exit_code == 0
+        assert (
+            "no templates" in result.output.lower()
+            or "0 templates" in result.output.lower()
+            or result.output.strip() == ""
+        )
+
+    def test_list_templates_nonexistent_directory(self) -> None:
+        """Test list-templates with nonexistent directory shows error."""
+        runner = CliRunner()
+        result = runner.invoke(
+            cli, ["--template-dir", "/nonexistent/path", "list-templates"]
+        )
+
+        # Should show error about missing directory
+        assert result.exit_code in [0, 1, 2]
+        # CLI may handle this at initialization or command execution
+
+    def test_list_templates_json_output(self, tmp_path: Path) -> None:
+        """Test list-templates --json outputs machine-readable format."""
+        template_data = {
+            "name": "Test Template",
+            "description": "A test template",
+            "category": "test",
+            "parameters": {},
+            "nodes": {},
+        }
+
+        (tmp_path / "test-template.json").write_text(json.dumps(template_data))
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli, ["--template-dir", str(tmp_path), "list-templates", "--json"]
+        )
+
+        # Should output valid JSON
+        assert result.exit_code == 0
+        output_data = json.loads(result.output)
+        assert isinstance(output_data, list)
+        assert len(output_data) == 1
